@@ -1,0 +1,14 @@
+- gz_topic_name: "/world/aspa135_m3/model/x500_segment_cam_down_0/link/camera_link/sensor/camera/image"
+  ros_topic_name: "/camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+  lazy: false
+
+# Add depth camera bridge if needed
+# - gz_topic_name: "/depth_camera"
+#   ros_topic_name: "/camera/depth"
+#   ros_type_name: "sensor_msgs/msg/Image"
+#   gz_type_name: "gz.msgs.Image"
+#   direction: GZ_TO_ROS
+#   lazy: false
