@@ -3,16 +3,17 @@
  */
 
 #include <px4_msgs/msg/offboard_control_mode.hpp>
-#include <px4_msgs/msg/trajectory_setpoint.hpp>
+#include <px4_msgs/msg/goto_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
-#include <px4_msgs/msg/vehicle_global_position.hpp>
+#include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
-#include <px4_msgs/msg/debug_vect.hpp>
+#include <px4_msgs/msg/timesync_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
 #include <chrono>
 #include <iostream>
+#include <math.h>
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
@@ -26,49 +27,30 @@ public:
 	{
 
 		offboard_control_mode_publisher_ = this->create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
-		trajectory_setpoint_publisher_ = this->create_publisher<TrajectorySetpoint>("/fmu/in/trajectory_setpoint", 10);
+		goto_setpoint_publisher_ = this->create_publisher<GotoSetpoint>("/fmu/in/goto_setpoint", 10);
 		vehicle_command_publisher_ = this->create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
-    rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
-    auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
-		vehicle_position_subscriber_ = this->create_subscription<VehicleGlobalPosition>("/fmu/out/vehicle_global_position", qos,
-      std::bind(&OffboardControl::position_callback, this, _1));
-		
-		
-		offboard_setpoint_counter_ = 0;
+		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
+		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
+		vehicle_position_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position_v1", qos,
+      		std::bind(&OffboardControl::position_callback, this, _1));
+		timesync_subscriber_ = this->create_subscription<TimesyncStatus>("/fmu/out/timesync_status", qos,
+      		[this](const TimesyncStatus::UniquePtr msg) {
+				// Sim started -> continue
+				if (msg->timestamp > 2000000 && this->armed == false) {
+					// Change to Offboard mode (2 seconds after system start)
+					this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
+					// Arm the vehicle
+					this->arm();
+					armed = true;
+				}
+			}
+		);
+		
 		auto timer_callback = [this]() -> void {
-			static float i = 0;
-
-			// Get target coord
-			
-			// float x, y, z = 0.0;
-			// float a = 5.0; float p = 20.0;
-			// x = 4*a/p *  std::abs(std::fmod((i-p/4.0), p) -p/2.0);
-			// y = i;
-			// z = -5.0;
-			// i += 0.3;
-
-			// std::cout << "============================="   << std::endl;
-			// std::cout << "x: " << x  << std::endl;
-			// std::cout << "y: " << y  << std::endl;
-			// std::cout << "z: " << z  << std::endl;
-
-			if (offboard_setpoint_counter_ == 10) {
-				// Change to Offboard mode after 10 setpoints
-				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
-
-				// Arm the vehicle
-				this->arm();
-			}
-
-			// offboard_control_mode needs to be paired with trajectory_setpoint
+			// offboard_control_mode needs to be paired with goto_setpoint
 			publish_offboard_control_mode();
-			// publish_trajectory_setpoint(x, y, -5.0);
-
-			// stop the counter after reaching 11
-			if (offboard_setpoint_counter_ < 11) {
-				offboard_setpoint_counter_++;
-			}
+			publish_goto_setpoint(target_x, target_y, target_z);
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
 	}
@@ -78,21 +60,30 @@ public:
 
 
 private:
+	bool armed = false;
+	
+	float target_x = 0.0f;
+	float target_y = 0.0f;
+	const float target_z = -10.0; // Constant
+
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
-	rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
+	rclcpp::Publisher<GotoSetpoint>::SharedPtr goto_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
-	rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr vehicle_position_subscriber_;
+	rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_position_subscriber_;
+	rclcpp::Subscription<TimesyncStatus>::SharedPtr timesync_subscriber_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
 	void publish_offboard_control_mode();
-	void publish_trajectory_setpoint(float x, float y, float z);
+	void publish_goto_setpoint(float x, float y, float z);
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0);
-  void position_callback(VehicleGlobalPosition msg);
+	void position_callback(VehicleLocalPosition msg);
+	float magnitude(float x, float y, float z);
+	template <typename T> int sgn(T val);
 };
 
 /**
@@ -136,13 +127,16 @@ void OffboardControl::publish_offboard_control_mode()
  *        For this example, it sends a trajectory setpoint to make the
  *        vehicle hover at 5 meters with a yaw angle of 180 degrees.
  */
-void OffboardControl::publish_trajectory_setpoint(float x, float y, float z)
+void OffboardControl::publish_goto_setpoint(float x, float y, float z)
 {
-	TrajectorySetpoint msg{};
+	GotoSetpoint msg{};
 	msg.position = {x, y, z};
-	msg.yaw = 0; // [-PI:PI]
+	msg.flag_control_heading = false;
+	msg.heading = 0.0f;
+	msg.flag_set_max_horizontal_speed = true;
+	msg.max_horizontal_speed = 5.0f;
 	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-	trajectory_setpoint_publisher_->publish(msg);
+	goto_setpoint_publisher_->publish(msg);
 }
 
 /**
@@ -170,17 +164,77 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
  * @brief Subscribe vehicle position
  * @param 
  */
-void OffboardControl::position_callback(const VehicleGlobalPosition msg)
+void OffboardControl::position_callback(const VehicleLocalPosition msg)
 {
-  // [this, x, y, z](const px4_msgs::msg::DebugVect::UniquePtr msg)
-  std::string out_log = "Pos: " + std::to_string(msg.lat) + " " + 
-  std::to_string(msg.lon) + " " + 
-  std::to_string(msg.alt) + "\n";
+	std::string out_log = "";
 
-  RCLCPP_INFO(this->get_logger(), "Received position message");
-  RCLCPP_INFO(this->get_logger(), out_log.c_str());
+	const float x_step_size = 5.0f;
+	const float y_step_size = 20.0f;
+	float x = 0.0f;
+	float y = 0.0f;
+
+	float dist = std::abs(OffboardControl::magnitude(msg.x-target_x, msg.y-target_y, msg.z-target_z));
+	
+
+	if (dist <= 0.2)
+	{
+	
+		RCLCPP_INFO(this->get_logger(), "=========");
+		out_log = "\nPos: " +
+		std::to_string(msg.x) + " " + 
+		std::to_string(msg.y) + " " + 
+		std::to_string(msg.z) + "\n";
+		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+
+		out_log = "\nIn Target: " +
+		std::to_string(target_x) + " " + 
+		std::to_string(target_y) + " " + 
+		std::to_string(target_z) + "\n";
+		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+
+		out_log = "\nDist: " + std::to_string(dist) + "\n";
+		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+		
+		// Set next waypoint
+		out_log = "\nIn Target: " +
+		std::to_string(target_x) + " " + 
+		std::to_string(target_y) + "\n";
+		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+
+		// Set next target point
+		x = round(target_x);
+		y = float(y_step_size*OffboardControl::sgn(sin((x+0.1)*M_PI)));
+
+		if (y == target_y)
+		{
+			target_x = float(x+x_step_size);
+		}
+		else 
+		{
+			target_y = float(y);
+		}
+
+		out_log = "\nOut Target: " +
+		std::to_string(target_x) + " " + 
+		std::to_string(target_y) + "\n";
+		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+
+		RCLCPP_INFO(this->get_logger(), "=========");
+	}
 }
 
+// Source - https://stackoverflow.com/a/4609795
+// Posted by user79758, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-04-26, License - CC BY-SA 4.0
+template <typename T> int OffboardControl::sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+
+float OffboardControl::magnitude(float x, float y, float z)
+{
+	return std::sqrt(x*x + y*y + z*z);
+}
 
 int main(int argc, char *argv[])
 {
