@@ -7,7 +7,7 @@
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
-#include <px4_msgs/msg/timesync_status.hpp>
+#include <px4_msgs/msg/vehicle_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
@@ -33,24 +33,30 @@ public:
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 		vehicle_position_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position_v1", qos,
       		std::bind(&OffboardControl::position_callback, this, _1));
-		timesync_subscriber_ = this->create_subscription<TimesyncStatus>("/fmu/out/timesync_status", qos,
-      		[this](const TimesyncStatus::UniquePtr msg) {
+		vehicle_stat_subscriber_ = this->create_subscription<VehicleStatus>("/fmu/out/vehicle_status_v4", qos,
+      		[this](const VehicleStatus::UniquePtr msg) {
 				// Sim started -> continue
-				if (msg->timestamp > 2000000 && this->armed == false) {
+				if (msg->timestamp > 2000000 && msg->arming_state == 1) {
 					// Change to Offboard mode (2 seconds after system start)
+					publish_offboard_control_mode();
+					publish_goto_setpoint(target_x, target_y, target_z);
+					
 					this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
 					// Arm the vehicle
 					this->arm();
+					
 					armed = true;
 				}
 			}
 		);
 		
 		auto timer_callback = [this]() -> void {
-			// offboard_control_mode needs to be paired with goto_setpoint
-			publish_offboard_control_mode();
-			publish_goto_setpoint(target_x, target_y, target_z);
+			if (armed == true) {
+				// offboard_control_mode needs to be paired with goto_setpoint
+				publish_offboard_control_mode();
+				publish_goto_setpoint(target_x, target_y, target_z);
+			}
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
 	}
@@ -72,7 +78,7 @@ private:
 	rclcpp::Publisher<GotoSetpoint>::SharedPtr goto_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_position_subscriber_;
-	rclcpp::Subscription<TimesyncStatus>::SharedPtr timesync_subscriber_;
+	rclcpp::Subscription<VehicleStatus>::SharedPtr vehicle_stat_subscriber_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 
