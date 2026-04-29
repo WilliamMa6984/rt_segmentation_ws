@@ -35,8 +35,12 @@ public:
       		std::bind(&OffboardControl::position_callback, this, _1));
 		vehicle_stat_subscriber_ = this->create_subscription<VehicleStatus>("/fmu/out/vehicle_status_v4", qos,
       		[this](const VehicleStatus::UniquePtr msg) {
+				// Sim already armed
+				if (msg->arming_state == 2) {
+					armed = true;
+				}
 				// Sim started -> continue
-				if (msg->timestamp > 2000000 && msg->arming_state == 1) {
+				if (msg->timestamp > 1000000 && msg->arming_state == 1) {
 					// Change to Offboard mode (2 seconds after system start)
 					publish_offboard_control_mode();
 					publish_goto_setpoint(target_x, target_y, target_z);
@@ -172,60 +176,39 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
  */
 void OffboardControl::position_callback(const VehicleLocalPosition msg)
 {
-	std::string out_log = "";
-
-	const float x_step_size = 5.0f;
-	const float y_step_size = 20.0f;
+	const float x_step_size = 10.0f;
+	const float y_step_size = 15.0f;
 	float x = 0.0f;
 	float y = 0.0f;
+	static bool axis_flag = false;
+	static bool posneg_flag = false;
 
 	float dist = std::abs(OffboardControl::magnitude(msg.x-target_x, msg.y-target_y, msg.z-target_z));
 	
 
 	if (dist <= 0.2)
 	{
-	
-		RCLCPP_INFO(this->get_logger(), "=========");
-		out_log = "\nPos: " +
-		std::to_string(msg.x) + " " + 
-		std::to_string(msg.y) + " " + 
-		std::to_string(msg.z) + "\n";
-		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+		x = round(msg.x);
 
-		out_log = "\nIn Target: " +
-		std::to_string(target_x) + " " + 
-		std::to_string(target_y) + " " + 
-		std::to_string(target_z) + "\n";
-		RCLCPP_INFO(this->get_logger(), out_log.c_str());
-
-		out_log = "\nDist: " + std::to_string(dist) + "\n";
-		RCLCPP_INFO(this->get_logger(), out_log.c_str());
-		
-		// Set next waypoint
-		out_log = "\nIn Target: " +
-		std::to_string(target_x) + " " + 
-		std::to_string(target_y) + "\n";
-		RCLCPP_INFO(this->get_logger(), out_log.c_str());
-
-		// Set next target point
-		x = round(target_x);
-		y = float(y_step_size*OffboardControl::sgn(sin((x+0.1)*M_PI)));
-
-		if (y == target_y)
+		if (axis_flag)
 		{
 			target_x = float(x+x_step_size);
 		}
 		else 
 		{
-			target_y = float(y);
+			if (posneg_flag) {
+				target_y = float(-y_step_size);
+			} else {
+				target_y = float(y_step_size);
+			}
+			posneg_flag = !posneg_flag;
 		}
-
-		out_log = "\nOut Target: " +
-		std::to_string(target_x) + " " + 
-		std::to_string(target_y) + "\n";
-		RCLCPP_INFO(this->get_logger(), out_log.c_str());
+		axis_flag = !axis_flag;
 
 		RCLCPP_INFO(this->get_logger(), "=========");
+		std::cout << "Out Target: " +
+		std::to_string(target_x) + " " + 
+		std::to_string(target_y) + "\n" << std::endl;
 	}
 }
 
