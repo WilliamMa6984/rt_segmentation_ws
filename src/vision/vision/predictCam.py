@@ -4,7 +4,6 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-from rclpy.time import Time
 
 from std_msgs.msg import Bool
 
@@ -24,6 +23,7 @@ class ImagePredictorSubscriber(Node):
       self.listener_callback, 
       10)
     self.subscription # prevent unused variable warning
+    self.publisher_ = self.create_publisher(Bool, '/cam_fps/predictor', 10)
     self.br = CvBridge()
 
     self.net, self.mask_values, self.device = predict.unet_load()
@@ -56,6 +56,10 @@ class ImagePredictorSubscriber(Node):
 
     cv2.imshow("camera", mask.astype(np.uint8)*255)
     cv2.waitKey(1)
+    
+    msg = Bool()
+    msg.data = True
+    self.publisher_.publish(msg)
     
 
 def main(args=None):
