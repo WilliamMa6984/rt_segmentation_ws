@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 import os
   
-class ImageSubscriber(Node):
+class ImageFeedSubscriber(Node):
   current_frame = None
   timer_save_img_period = 0.5
   saved_img_folder = ""
@@ -22,13 +22,14 @@ class ImageSubscriber(Node):
     self.subscription # prevent unused variable warning
     self.br = CvBridge()
     
-    t = datetime.now()
-    self.saved_img_folder = t.isoformat(timespec='milliseconds')
-    os.makedirs(os.path.join("./out", self.saved_img_folder), exist_ok=True)
-    self.create_timer(self.timer_save_img_period, self.save_image_process)
+    # # Save image
+    # t = datetime.now()
+    # self.saved_img_folder = t.isoformat(timespec='milliseconds')
+    # os.makedirs(os.path.join("./out", self.saved_img_folder), exist_ok=True)
+    # self.create_timer(self.timer_save_img_period, self.save_image_process)
     
   def listener_callback(self, data):
-    self.current_frame = self.br.imgmsg_to_cv2(data)
+    self.current_frame = cv2.cvtColor(self.br.imgmsg_to_cv2(data), cv2.COLOR_RGB2BGR)
     cv2.imshow("camera", self.current_frame)
     cv2.waitKey(1)
     
@@ -42,7 +43,7 @@ class ImageSubscriber(Node):
 
 def main(args=None):
   rclpy.init(args=args)
-  image_subscriber = ImageSubscriber()
+  image_subscriber = ImageFeedSubscriber()
   rclpy.spin(image_subscriber)
   image_subscriber.destroy_node()
   rclpy.shutdown()
