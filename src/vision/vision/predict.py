@@ -72,7 +72,7 @@ def mask_to_image(mask: np.ndarray, mask_values):
 
 def unet_load():
     package_share_directory = get_package_share_directory('vision')
-    model_file = os.path.join(package_share_directory, 'checkpoints', 'checkpoint_epoch5.pth')
+    model_file = os.path.join(package_share_directory, 'checkpoints', 'checkpoint_epoch19.pth')
 
     net = UNet(n_channels=3, n_classes=2, bilinear=False)
 

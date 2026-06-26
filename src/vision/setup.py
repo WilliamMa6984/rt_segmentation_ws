@@ -13,6 +13,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'checkpoints'), glob('checkpoints/checkpoint_epoch5.pth')),
+        (os.path.join('share', package_name, 'checkpoints'), glob('checkpoints/checkpoint_epoch19.pth')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

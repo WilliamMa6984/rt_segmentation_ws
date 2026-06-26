@@ -1,1 +1,2 @@
 src/vision/checkpoints/checkpoint_epoch5.pth filter=lfs diff=lfs merge=lfs -text
+src/vision/checkpoints/checkpoint_epoch19.pth filter=lfs diff=lfs merge=lfs -text
