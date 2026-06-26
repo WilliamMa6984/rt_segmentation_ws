@@ -4,6 +4,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
+import cProfile
 
 from std_msgs.msg import Bool
 
@@ -61,8 +62,15 @@ class ImagePredictorSubscriber(Node):
     msg.data = True
     self.publisher_.publish(msg)
     
+# def process(args=None):
+#   rclpy.init(args=args)
+#   image_subscriber = ImagePredictorSubscriber()
+#   rclpy.spin(image_subscriber)
+#   image_subscriber.destroy_node()
+#   rclpy.shutdown()
 
 def main(args=None):
+  # cProfile.runctx('process(args)', globals(), locals(), 'profile')
   rclpy.init(args=args)
   image_subscriber = ImagePredictorSubscriber()
   rclpy.spin(image_subscriber)

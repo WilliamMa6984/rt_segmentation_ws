@@ -44,7 +44,8 @@ def predict_img(net,
     img = img.to(device=device, dtype=torch.float32)
 
     with torch.no_grad():
-        output = net(img).cpu()
+        output = net(img)
+        output = output.cpu()
         output = F.interpolate(output, (full_img.shape[1], full_img.shape[0]), mode='bilinear')
         if net.n_classes > 1:
             mask = output.argmax(dim=1)

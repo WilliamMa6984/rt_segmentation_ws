@@ -13,6 +13,7 @@ find_package(rclcpp REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
+# Lawnmower
 add_executable(control src/control.cpp)
 ament_target_dependencies(control rclcpp px4_msgs)
 target_include_directories(control PUBLIC
@@ -21,6 +22,17 @@ target_include_directories(control PUBLIC
 target_compile_features(control PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
 install(TARGETS control
+  DESTINATION lib/${PROJECT_NAME})
+
+# Ascent
+add_executable(controlVertical src/controlVertical.cpp)
+ament_target_dependencies(controlVertical rclcpp px4_msgs)
+target_include_directories(controlVertical PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(controlVertical PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+install(TARGETS controlVertical
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
