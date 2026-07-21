@@ -1,2 +1,5 @@
-src/vision/checkpoints/checkpoint_epoch5.pth filter=lfs diff=lfs merge=lfs -text
-src/vision/checkpoints/checkpoint_epoch19.pth filter=lfs diff=lfs merge=lfs -text
+src/vision/checkpoints/archive/checkpoint_epoch5.pth filter=lfs diff=lfs merge=lfs -text
+src/vision/checkpoints/archive/checkpoint_epoch19.pth filter=lfs diff=lfs merge=lfs -text
+src/vision/checkpoints/archive filter=lfs diff=lfs merge=lfs -text
+src/vision/checkpoints/checkpoint_epoch10_960p.pth filter=lfs diff=lfs merge=lfs -text
+src/vision/checkpoints/checkpoint_epoch10.pth filter=lfs diff=lfs merge=lfs -text
