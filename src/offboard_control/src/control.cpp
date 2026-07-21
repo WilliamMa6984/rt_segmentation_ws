@@ -6,6 +6,7 @@
 #include <px4_msgs/msg/goto_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
+#include <px4_msgs/msg/vehicle_global_position.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -33,6 +34,8 @@ public:
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 		vehicle_position_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position_v1", qos,
       		std::bind(&OffboardControl::position_callback, this, _1));
+		vehicle_global_pos_subscriber_ = this->create_subscription<VehicleGlobalPosition>("/fmu/out/vehicle_global_position", qos,
+      		std::bind(&OffboardControl::global_position_callback, this, _1));
 		vehicle_stat_subscriber_ = this->create_subscription<VehicleStatus>("/fmu/out/vehicle_status_v4", qos,
       		[this](const VehicleStatus::UniquePtr msg) {
 				// Sim already armed
@@ -61,6 +64,11 @@ public:
 				publish_offboard_control_mode();
 				publish_goto_setpoint(target_x, target_y, target_z);
 			}
+			
+			std::cout << "Global Pos (lat lon alt): " +
+			std::to_string(lat) + " " + 
+			std::to_string(lon) + " " + 
+			std::to_string(alt) + "\n" << std::endl;
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
 	}
@@ -76,12 +84,17 @@ private:
 	float target_y = 0.0f;
 	const float target_z = -10.0; // Constant
 
+	float lat = 0.0f;
+	float lon = 0.0f;
+	float alt = 0.0f;
+
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
 	rclcpp::Publisher<GotoSetpoint>::SharedPtr goto_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_position_subscriber_;
+	rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr vehicle_global_pos_subscriber_;
 	rclcpp::Subscription<VehicleStatus>::SharedPtr vehicle_stat_subscriber_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
@@ -92,6 +105,7 @@ private:
 	void publish_goto_setpoint(float x, float y, float z);
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0);
 	void position_callback(VehicleLocalPosition msg);
+	void global_position_callback(VehicleGlobalPosition msg);
 	float magnitude(float x, float y, float z);
 	template <typename T> int sgn(T val);
 };
@@ -168,6 +182,17 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
 	msg.from_external = true;
 	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
 	vehicle_command_publisher_->publish(msg);
+}
+
+/**
+ * @brief Subscribe vehicle global position
+ * @param 
+ */
+void OffboardControl::global_position_callback(const VehicleGlobalPosition msg)
+{
+	alt = msg.alt;
+	lon = msg.lon;
+	lat = msg.lat;
 }
 
 /**
