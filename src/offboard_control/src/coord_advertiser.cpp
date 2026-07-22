@@ -5,6 +5,7 @@
 #include <px4_msgs/msg/vehicle_attitude.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2/LinearMath/Matrix3x3.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
@@ -26,12 +27,14 @@ public:
       		std::bind(&CoordAdvertiser::global_position_callback, this, _1));
 		vehicle_attitude_subscriber_ = this->create_subscription<VehicleAttitude>("/fmu/out/vehicle_attitude", qos,
       		std::bind(&CoordAdvertiser::attitude_callback, this, _1));
+		lidar_subscriber_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/lidar", qos,
+      		std::bind(&CoordAdvertiser::lidar_callback, this, _1));
 
 		auto timer_callback = [this]()->void {
 			auto debug_vect = px4_msgs::msg::DebugVect();
 			this->publisher_->publish(debug_vect);
 			
-			std::cout << "Global Pos (lat lon alt): " +
+			std::cout << "Pos (lat lon alt): " +
 			std::to_string(lat) + " " + 
 			std::to_string(lon) + " " + 
 			std::to_string(alt) + "\n" << std::endl;
@@ -40,8 +43,11 @@ public:
 			std::to_string(roll) + " " + 
 			std::to_string(pitch) + " " + 
 			std::to_string(yaw) + "\n" << std::endl;
+
+			std::cout << "Dist to gnd: " +
+			std::to_string(lidarDist) + "\n" << std::endl;
 		};
-		timer_ = this->create_wall_timer(1000ms, timer_callback);
+		timer_ = this->create_wall_timer(100ms, timer_callback);
 	}
 
 private:
@@ -50,6 +56,7 @@ private:
 
 	rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr vehicle_global_pos_subscriber_;
 	rclcpp::Subscription<VehicleAttitude>::SharedPtr vehicle_attitude_subscriber_;
+	rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr lidar_subscriber_;
 
 	float lat = 0.0f;
 	float lon = 0.0f;
@@ -59,8 +66,11 @@ private:
 	double pitch = 0.0f;
 	double yaw = 0.0f;
 
+	float lidarDist = 0.0f;
+
 	void global_position_callback(VehicleGlobalPosition msg);
 	void attitude_callback(VehicleAttitude msg);
+	void lidar_callback(sensor_msgs::msg::LaserScan msg);
 };
 
 /**
@@ -86,16 +96,16 @@ void CoordAdvertiser::attitude_callback(const VehicleAttitude msg)
 	m.getRPY(roll, pitch, yaw, 1);
 }
 
-// /**
-//  * Evandro Bernardes, Stéphane Viollet. Quaternion to Euler angles conversion: a direct, general and com-
-//  * putationally efficient method. PLoS ONE, 2022, 17 (11), pp.e0276302. ⟨10.1371/journal.pone.0276302⟩. ⟨hal-
-//  * 03848730⟩
-//  * @brief Quaternion to Euler
-//  */
-// std::vector<float> CoordAdvertiser::q2euler(const std::array<float, 4>& q)
-// {
-// 	Eigen::Quaternion
-// }
+/**
+ * @brief Subscribe lidar sensor
+ * @param 
+ */
+void CoordAdvertiser::lidar_callback(const sensor_msgs::msg::LaserScan msg)
+{
+	std::vector<float> ranges = msg.ranges;
+
+	lidarDist = ranges.front();
+}
 
 int main(int argc, char *argv[])
 {
