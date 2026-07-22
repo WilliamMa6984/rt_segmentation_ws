@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(tf2_ros REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -24,15 +25,15 @@ target_compile_features(control PUBLIC c_std_99 cxx_std_17)  # Require C99 and C
 install(TARGETS control
   DESTINATION lib/${PROJECT_NAME})
 
-# Ascent
-add_executable(controlVertical src/controlVertical.cpp)
-ament_target_dependencies(controlVertical rclcpp px4_msgs)
-target_include_directories(controlVertical PUBLIC
+# Get coordinates
+add_executable(coord_advertiser src/coord_advertiser.cpp)
+ament_target_dependencies(coord_advertiser rclcpp px4_msgs tf2_ros)
+target_include_directories(coord_advertiser PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-target_compile_features(controlVertical PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(coord_advertiser PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
-install(TARGETS controlVertical
+install(TARGETS coord_advertiser
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

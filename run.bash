@@ -11,7 +11,7 @@ source install/local_setup.bash
 # ros2 run vision pycam
 # ros2 run offboard_control control
 
-gnome-terminal --tab --title='Bridge' -- sh -c "ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=bridge_config/camera_bridge.yaml"
+gnome-terminal --tab --title='Bridge' -- sh -c "ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=bridge_config/sensor_bridge.yaml"
 
 gnome-terminal --tab --title='Node' -- sh -c "ros2 run vision pycam"
 gnome-terminal --tab --title='Node' -- sh -c "ros2 run vision predictCam"
