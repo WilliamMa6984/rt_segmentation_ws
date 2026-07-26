@@ -40,8 +40,10 @@ class ImagePredictorSubscriber(Node):
     print("predictCam node")
     
   def publisher_callback(self):
-    self.img_publisher_.publish(self.img_msg)
-    self.img_100_publisher_.publish(self.img_100_msg)
+    if (self.img_msg is not None):
+      self.img_publisher_.publish(self.img_msg)
+    if (self.img_100_msg is not None):
+      self.img_100_publisher_.publish(self.img_100_msg)
 
 
   def listener_callback(self, data):

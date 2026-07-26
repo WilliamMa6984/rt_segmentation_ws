@@ -36,8 +36,8 @@ public:
       		std::bind(&CoordAdvertiser::attitude_callback, this, _1));
 		lidar_subscriber_ = this->create_subscription<LaserScan>("/lidar", qos,
       		std::bind(&CoordAdvertiser::lidar_callback, this, _1));
-		// prediction_subscriber_ = this->create_subscription<sensor_msgs::msg::Image>("/predictor/image100", qos,
-      	// 	std::bind(&CoordAdvertiser::predictor_callback, this, _1));
+		prediction_subscriber_ = this->create_subscription<sensor_msgs::msg::Image>("/predictor/image_100", qos,
+      		std::bind(&CoordAdvertiser::predictor_callback, this, _1));
 
 		auto timer_callback = [this]()->void {
 			auto occuGrid = OccupancyGrid();
@@ -45,7 +45,8 @@ public:
 			occuGrid.header.stamp = rclcpp::Clock().now();
 			occuGrid.header.frame_id = "map";
 
-			occuGrid.info.resolution = 1.7;
+			occuGrid.info.resolution = 1.7/100.0;
+			// occuGrid.info.resolution = 1;
 
 			occuGrid.info.width = 100;
 			occuGrid.info.height = 100;
@@ -57,11 +58,12 @@ public:
 			occuGrid.info.origin.orientation.y = 0.0;
 			occuGrid.info.origin.orientation.z = 0.0;
 			occuGrid.info.origin.orientation.w = 0.0;
-			occuGrid.data = {100, 0, 0, 0, -1, 0, 0, 0, 100};
+			// occuGrid.data = {100, 0, 0, 0, -1, 0, 0, 0, 100};
 
-			// for (uint8_t d: predict_img100_data)
-			// 	std::cout << d << ' ';
-			// std::copy(predict_img100_data.begin(), predict_img100_data.end(), occuGrid.data);
+			// for (uint8_t d: predict_img100_data) {
+			// 	std::cout << std::to_string(d) << ' ';
+			// }
+			std::copy(&predict_img100_data[0], &predict_img100_data[100*100], back_inserter(occuGrid.data));
 
 			this->occupancy_grid_publisher_->publish(occuGrid);
 			
@@ -166,18 +168,15 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	// Posted by stateMachine, modified by community. See post 'Timeline' for change history
 	// Retrieved 2026-07-26, License - CC BY-SA 4.0
 	cv_img = cv_ptr->image;
-	
-	RCLCPP_INFO(this->get_logger(), "!!!!");
-	std::cout << "i: " + std::to_string(cv_img.cols) + "\n";
-	std::cout << "i: " + std::to_string(cv_img.rows) + "\n";
-	RCLCPP_INFO(this->get_logger(), "====");
 
-	// matArray_i = 0;
-	// for ( it = cv_img.begin<uint8_t>(), end = cv_img.end<uint8_t>(); it != end; ++it ) {
-	// 	predict_img100_data[matArray_i] = *it;
-	// 	matArray_i++;
-		
-	// }
+	matArray_i = 0;
+	for ( it = cv_img.begin<uint8_t>(), end = cv_img.end<uint8_t>(); it != end; ++it ) {
+		predict_img100_data[matArray_i] = *it;
+		matArray_i++;
+	}
+
+	// std::cout << "c: " +
+	// std::to_string(predict_img100_data[0]) + "\n" << std::endl;
 }
 
 int main(int argc, char *argv[])
