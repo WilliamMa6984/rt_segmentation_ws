@@ -15,8 +15,6 @@ class ImagePredictorSubscriber(Node):
   model = None
   net = None
   mask_values = [0, 1]
-  img_msg = None
-  img_100_msg = None # 100x100 image for occupancy grid
 
   def __init__(self):
     super().__init__('predictor_subscriber')
@@ -26,24 +24,15 @@ class ImagePredictorSubscriber(Node):
       self.listener_callback, 
       10)
     self.subscription # prevent unused variable warning
-    self.publisher_ = self.create_publisher(Bool, '/predictor/fps', 10)
-    self.img_publisher_ = self.create_publisher(Image, '/predictor/image', 10)
-    self.img_100_publisher_ = self.create_publisher(Image, '/predictor/image_100', 10)
+    self.publisher_ = self.create_publisher(Bool, '/cam_fps/predictor', 10)
     self.br = CvBridge()
 
     self.net, self.mask_values, self.device = predict.unet_load()
     if (self.net):
       self.get_logger().info("Model loaded: " + str(self.mask_values))
 
-    self.timer = self.create_timer(0.1, self.publisher_callback)
-  
     print("predictCam node")
     
-  def publisher_callback(self):
-    self.img_publisher_.publish(self.img_msg)
-    self.img_100_publisher_.publish(self.img_100_msg)
-
-
   def listener_callback(self, data):
     img = self.br.imgmsg_to_cv2(data) # PIL image uses RGB, don't convert to BGR
 
@@ -67,14 +56,9 @@ class ImagePredictorSubscriber(Node):
                     scale_factor=1.0,
                     out_threshold=0.2,
                     device=self.device)
-    
-    mask = mask.astype(np.uint8)*100
 
-    # cv2.imshow("camera", mask)
-    # cv2.waitKey(1)
-
-    self.img_msg = self.br.cv2_to_imgmsg(mask, encoding="mono8")
-    self.img_100_msg = self.br.cv2_to_imgmsg(cv2.resize(mask, (100, 100)) , encoding="mono8")
+    cv2.imshow("camera", mask.astype(np.uint8)*255)
+    cv2.waitKey(1)
     
     msg = Bool()
     msg.data = True

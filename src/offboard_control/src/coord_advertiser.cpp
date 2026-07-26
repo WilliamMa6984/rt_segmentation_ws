@@ -3,13 +3,20 @@
 #include <px4_msgs/msg/debug_vect.hpp>
 #include <px4_msgs/msg/vehicle_global_position.hpp>
 #include <px4_msgs/msg/vehicle_attitude.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2/LinearMath/Matrix3x3.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/image.hpp>
+
+#include <image_transport/image_transport.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
+using namespace nav_msgs::msg;
+using namespace sensor_msgs::msg;
 using std::placeholders::_1;
 
 class CoordAdvertiser : public rclcpp::Node
@@ -18,7 +25,7 @@ public:
 	CoordAdvertiser() : Node("coord_advertiser")
 	{
 
-		publisher_ = this->create_publisher<px4_msgs::msg::DebugVect>("/fmu/in/img2coord", 10);
+		occupancy_grid_publisher_ = this->create_publisher<OccupancyGrid>("/moss_occ_grid", 10);
 
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
@@ -27,12 +34,36 @@ public:
       		std::bind(&CoordAdvertiser::global_position_callback, this, _1));
 		vehicle_attitude_subscriber_ = this->create_subscription<VehicleAttitude>("/fmu/out/vehicle_attitude", qos,
       		std::bind(&CoordAdvertiser::attitude_callback, this, _1));
-		lidar_subscriber_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/lidar", qos,
+		lidar_subscriber_ = this->create_subscription<LaserScan>("/lidar", qos,
       		std::bind(&CoordAdvertiser::lidar_callback, this, _1));
+		// prediction_subscriber_ = this->create_subscription<sensor_msgs::msg::Image>("/predictor/image100", qos,
+      	// 	std::bind(&CoordAdvertiser::predictor_callback, this, _1));
 
 		auto timer_callback = [this]()->void {
-			auto debug_vect = px4_msgs::msg::DebugVect();
-			this->publisher_->publish(debug_vect);
+			auto occuGrid = OccupancyGrid();
+
+			occuGrid.header.stamp = rclcpp::Clock().now();
+			occuGrid.header.frame_id = "map";
+
+			occuGrid.info.resolution = 1.7;
+
+			occuGrid.info.width = 100;
+			occuGrid.info.height = 100;
+
+			occuGrid.info.origin.position.x = 0.0;
+			occuGrid.info.origin.position.y = 0.0;
+			occuGrid.info.origin.position.z = 0.0;
+			occuGrid.info.origin.orientation.x = 0.0;
+			occuGrid.info.origin.orientation.y = 0.0;
+			occuGrid.info.origin.orientation.z = 0.0;
+			occuGrid.info.origin.orientation.w = 0.0;
+			occuGrid.data = {100, 0, 0, 0, -1, 0, 0, 0, 100};
+
+			// for (uint8_t d: predict_img100_data)
+			// 	std::cout << d << ' ';
+			// std::copy(predict_img100_data.begin(), predict_img100_data.end(), occuGrid.data);
+
+			this->occupancy_grid_publisher_->publish(occuGrid);
 			
 			std::cout << "Pos (lat lon alt): " +
 			std::to_string(lat) + " " + 
@@ -47,18 +78,19 @@ public:
 			std::cout << "Dist to gnd: " +
 			std::to_string(lidarDist) + "\n" << std::endl;
 		};
-		timer_ = this->create_wall_timer(100ms, timer_callback);
+		timer_ = this->create_wall_timer(1000ms, timer_callback);
 
 		RCLCPP_INFO(this->get_logger(), "coord_advertiser node");
 	}
 
 private:
 	rclcpp::TimerBase::SharedPtr timer_;
-	rclcpp::Publisher<px4_msgs::msg::DebugVect>::SharedPtr publisher_;
+	rclcpp::Publisher<OccupancyGrid>::SharedPtr occupancy_grid_publisher_;
 
 	rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr vehicle_global_pos_subscriber_;
 	rclcpp::Subscription<VehicleAttitude>::SharedPtr vehicle_attitude_subscriber_;
-	rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr lidar_subscriber_;
+	rclcpp::Subscription<LaserScan>::SharedPtr lidar_subscriber_;
+	rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr prediction_subscriber_;
 
 	float lat = 0.0f;
 	float lon = 0.0f;
@@ -70,9 +102,12 @@ private:
 
 	float lidarDist = 0.0f;
 
+	uint8_t predict_img100_data[100*100]; // 100x100 image
+
 	void global_position_callback(VehicleGlobalPosition msg);
 	void attitude_callback(VehicleAttitude msg);
-	void lidar_callback(sensor_msgs::msg::LaserScan msg);
+	void lidar_callback(LaserScan msg);
+	void predictor_callback(sensor_msgs::msg::Image msg);
 };
 
 /**
@@ -102,11 +137,47 @@ void CoordAdvertiser::attitude_callback(const VehicleAttitude msg)
  * @brief Subscribe lidar sensor
  * @param 
  */
-void CoordAdvertiser::lidar_callback(const sensor_msgs::msg::LaserScan msg)
+void CoordAdvertiser::lidar_callback(const LaserScan msg)
 {
 	std::vector<float> ranges = msg.ranges;
 
 	lidarDist = ranges.front();
+}
+
+/**
+ * @brief Subscribe to prediction image
+ * @param 
+ */
+void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
+	cv_bridge::CvImagePtr cv_ptr;
+	cv::Mat cv_img;
+	cv::MatIterator_<uint8_t> it, end;
+	int matArray_i;
+
+	try {
+		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8);
+	}
+	catch (cv_bridge::Exception& e) {
+		RCLCPP_INFO(this->get_logger(), "cv_bridge exception");
+		return;
+	}
+
+	// Source - https://stackoverflow.com/a/65835875
+	// Posted by stateMachine, modified by community. See post 'Timeline' for change history
+	// Retrieved 2026-07-26, License - CC BY-SA 4.0
+	cv_img = cv_ptr->image;
+	
+	RCLCPP_INFO(this->get_logger(), "!!!!");
+	std::cout << "i: " + std::to_string(cv_img.cols) + "\n";
+	std::cout << "i: " + std::to_string(cv_img.rows) + "\n";
+	RCLCPP_INFO(this->get_logger(), "====");
+
+	// matArray_i = 0;
+	// for ( it = cv_img.begin<uint8_t>(), end = cv_img.end<uint8_t>(); it != end; ++it ) {
+	// 	predict_img100_data[matArray_i] = *it;
+	// 	matArray_i++;
+		
+	// }
 }
 
 int main(int argc, char *argv[])

@@ -8,16 +8,19 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(cv_bridge REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
 # Lawnmower
 add_executable(control src/control.cpp)
-ament_target_dependencies(control rclcpp px4_msgs)
+ament_target_dependencies(control rclcpp px4_msgs nav_msgs)
 target_include_directories(control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -28,7 +31,7 @@ install(TARGETS control
 
 # Get coordinates
 add_executable(coord_advertiser src/coord_advertiser.cpp)
-ament_target_dependencies(coord_advertiser rclcpp px4_msgs tf2_ros sensor_msgs)
+ament_target_dependencies(coord_advertiser rclcpp px4_msgs nav_msgs tf2_ros sensor_msgs image_transport cv_bridge)
 target_include_directories(coord_advertiser PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
