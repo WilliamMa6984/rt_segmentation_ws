@@ -48,6 +48,8 @@ public:
 			std::to_string(lidarDist) + "\n" << std::endl;
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
+
+		RCLCPP_INFO(this->get_logger(), "coord_advertiser node");
 	}
 
 private:

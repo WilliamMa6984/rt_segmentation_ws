@@ -30,6 +30,8 @@ class ImagePredictorSubscriber(Node):
     self.net, self.mask_values, self.device = predict.unet_load()
     if (self.net):
       self.get_logger().info("Model loaded: " + str(self.mask_values))
+
+    print("predictCam node")
     
   def listener_callback(self, data):
     img = self.br.imgmsg_to_cv2(data) # PIL image uses RGB, don't convert to BGR

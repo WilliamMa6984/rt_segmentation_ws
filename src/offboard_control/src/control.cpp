@@ -63,6 +63,8 @@ public:
 			}
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
+
+		RCLCPP_INFO(this->get_logger(), "control node");
 	}
 
 	void arm();
@@ -184,6 +186,11 @@ void OffboardControl::position_callback(const VehicleLocalPosition msg)
 	static bool posneg_flag = false;
 
 	float dist = std::abs(OffboardControl::magnitude(msg.x-target_x, msg.y-target_y, msg.z-target_z));
+
+	std::cout << "Current: " +
+	std::to_string(msg.x) + " " + 
+	std::to_string(msg.y) + " " + 
+	std::to_string(msg.z) + "\n" << std::endl;
 	
 
 	if (dist <= 0.2)

@@ -8,3 +8,4 @@ source /opt/ros/humble/setup.bash
 source install/local_setup.bash
 
 ros2 run vision predictCam
+# ros2 run vision pycam
