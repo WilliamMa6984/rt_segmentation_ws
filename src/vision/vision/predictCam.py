@@ -40,8 +40,8 @@ class ImagePredictorSubscriber(Node):
     print("predictCam node")
     
   def publisher_callback(self):
-    if (self.img_msg is not None):
-      self.img_publisher_.publish(self.img_msg)
+    # if (self.img_msg is not None):
+    #   self.img_publisher_.publish(self.img_msg)
     if (self.img_100_msg is not None):
       self.img_100_publisher_.publish(self.img_100_msg)
 
@@ -75,7 +75,7 @@ class ImagePredictorSubscriber(Node):
     # cv2.imshow("camera", mask)
     # cv2.waitKey(1)
 
-    self.img_msg = self.br.cv2_to_imgmsg(mask, encoding="mono8")
+    # self.img_msg = self.br.cv2_to_imgmsg(mask, encoding="mono8")
     self.img_100_msg = self.br.cv2_to_imgmsg(cv2.resize(mask, (100, 100)) , encoding="mono8")
     
     msg = Bool()

@@ -12,12 +12,15 @@
 #include <image_transport/image_transport.hpp>
 #include <cv_bridge/cv_bridge.h>
 
+#include "parameters.h"
+
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 using namespace nav_msgs::msg;
 using namespace sensor_msgs::msg;
 using std::placeholders::_1;
+
 
 class CoordAdvertiser : public rclcpp::Node
 {
@@ -45,11 +48,11 @@ public:
 			occuGrid.header.stamp = rclcpp::Clock().now();
 			occuGrid.header.frame_id = "map";
 
-			occuGrid.info.resolution = 1.7/100.0;
+			occuGrid.info.resolution = 1.7/DETECTION_SZ;
 			// occuGrid.info.resolution = 1;
 
-			occuGrid.info.width = 100;
-			occuGrid.info.height = 100;
+			occuGrid.info.width = DETECTION_SZ;
+			occuGrid.info.height = DETECTION_SZ;
 
 			occuGrid.info.origin.position.x = 0.0;
 			occuGrid.info.origin.position.y = 0.0;
@@ -58,12 +61,8 @@ public:
 			occuGrid.info.origin.orientation.y = 0.0;
 			occuGrid.info.origin.orientation.z = 0.0;
 			occuGrid.info.origin.orientation.w = 0.0;
-			// occuGrid.data = {100, 0, 0, 0, -1, 0, 0, 0, 100};
 
-			// for (uint8_t d: predict_img100_data) {
-			// 	std::cout << std::to_string(d) << ' ';
-			// }
-			std::copy(&predict_img100_data[0], &predict_img100_data[100*100], back_inserter(occuGrid.data));
+			std::copy(&predict_img100_data[0], &predict_img100_data[DETECTION_SZ*DETECTION_SZ], back_inserter(occuGrid.data));
 
 			this->occupancy_grid_publisher_->publish(occuGrid);
 			
@@ -104,7 +103,7 @@ private:
 
 	float lidarDist = 0.0f;
 
-	uint8_t predict_img100_data[100*100]; // 100x100 image
+	uint8_t predict_img100_data[DETECTION_SZ*DETECTION_SZ]; // 100x100 image
 
 	void global_position_callback(VehicleGlobalPosition msg);
 	void attitude_callback(VehicleAttitude msg);
@@ -129,7 +128,8 @@ void CoordAdvertiser::global_position_callback(const VehicleGlobalPosition msg)
  */
 void CoordAdvertiser::attitude_callback(const VehicleAttitude msg)
 {
-	tf2::Quaternion q(msg.q[0], msg.q[1], msg.q[2], msg.q[3]);
+	// Quaternion: w x y z
+	tf2::Quaternion q(msg.q[1], msg.q[2], msg.q[3], msg.q[0]);
 	tf2::Matrix3x3 m(q);
 
 	m.getRPY(roll, pitch, yaw, 1);
@@ -153,6 +153,7 @@ void CoordAdvertiser::lidar_callback(const LaserScan msg)
 void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv_bridge::CvImagePtr cv_ptr;
 	cv::Mat cv_img;
+	cv::Mat temp;
 	cv::MatIterator_<uint8_t> it, end;
 	int matArray_i;
 
@@ -167,10 +168,14 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	// Source - https://stackoverflow.com/a/65835875
 	// Posted by stateMachine, modified by community. See post 'Timeline' for change history
 	// Retrieved 2026-07-26, License - CC BY-SA 4.0
-	cv_img = cv_ptr->image;
+	cv::transpose(cv_ptr->image, temp);
+	cv::flip(temp, cv_img, -1);
 
 	matArray_i = 0;
 	for ( it = cv_img.begin<uint8_t>(), end = cv_img.end<uint8_t>(); it != end; ++it ) {
+		if (matArray_i >= DETECTION_SZ*DETECTION_SZ) {
+			RCLCPP_INFO(this->get_logger(), "predictor_callback exception: matArray_i exceeds array index");
+		}
 		predict_img100_data[matArray_i] = *it;
 		matArray_i++;
 	}
