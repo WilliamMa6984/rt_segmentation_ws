@@ -11,6 +11,7 @@
 
 #include <image_transport/image_transport.hpp>
 #include <cv_bridge/cv_bridge.h>
+#include <opencv2/opencv.hpp>
 
 #include "parameters.h"
 
@@ -21,6 +22,7 @@ using namespace nav_msgs::msg;
 using namespace sensor_msgs::msg;
 using std::placeholders::_1;
 
+cv::Mat rotate_image(const cv::Mat& image, double angle);
 
 class CoordAdvertiser : public rclcpp::Node
 {
@@ -154,8 +156,14 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv_bridge::CvImagePtr cv_ptr;
 	cv::Mat cv_img;
 	cv::Mat temp;
+	cv::Mat cv_img_rot;
 	cv::MatIterator_<uint8_t> it, end;
 	int matArray_i;
+
+	// Ignore if pitch too high
+	if (pitch > 0.087) {
+		return;
+	}
 
 	try {
 		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8);
@@ -170,9 +178,10 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	// Retrieved 2026-07-26, License - CC BY-SA 4.0
 	cv::transpose(cv_ptr->image, temp);
 	cv::flip(temp, cv_img, -1);
+	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI);
 
 	matArray_i = 0;
-	for ( it = cv_img.begin<uint8_t>(), end = cv_img.end<uint8_t>(); it != end; ++it ) {
+	for ( it = cv_img_rot.begin<uint8_t>(), end = cv_img_rot.end<uint8_t>(); it != end; ++it ) {
 		if (matArray_i >= DETECTION_SZ*DETECTION_SZ) {
 			RCLCPP_INFO(this->get_logger(), "predictor_callback exception: matArray_i exceeds array index");
 		}
@@ -182,6 +191,25 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 
 	// std::cout << "c: " +
 	// std::to_string(predict_img100_data[0]) + "\n" << std::endl;
+}
+
+// Source - https://stackoverflow.com/a/9042907
+// Posted by Alex Rodrigues, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-07-29, License - CC BY-SA 4.0
+//
+// Function to rotate image about its centre
+cv::Mat rotate_image(const cv::Mat& image, double angle) {
+    // image.cols is width, image.rows is height
+    cv::Point2f image_center(image.cols / 2.0f, image.rows / 2.0f);
+    
+    // Get the 2x3 rotation matrix
+    cv::Mat rot_mat = cv::getRotationMatrix2D(image_center, angle, 1.0);
+    
+    // Perform the affine transformation
+    cv::Mat result;
+    cv::warpAffine(image, result, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_LINEAR);
+    
+    return result;
 }
 
 int main(int argc, char *argv[])
