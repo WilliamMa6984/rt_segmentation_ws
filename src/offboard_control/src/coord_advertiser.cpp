@@ -161,11 +161,12 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv::MatIterator_<uint8_t> it, end;
 	int matArray_i;
 
-	// // Ignore if roll or pitch too high
-	// if (pitch > 0.1745 || roll > 0.1745) { // 10 deg
-
-	// 	return;
-	// }
+	// Ignore if roll or pitch too high
+	if (std::abs(pitch) > 0.13 || std::abs(roll) > 0.13) { // 5 deg
+		// return empty detection
+		std::fill(std::begin(predict_img100_data), std::end(predict_img100_data), 0);
+		return;
+	}
 
 	try {
 		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8);
@@ -222,11 +223,11 @@ cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd) {
     // Get the 2x3 rotation matrix
     cv::Mat rot_mat = cv::getRotationMatrix2D(image_center, angle, scale_factor);
 
-	int scale_int = (int)(std::ceil(scale_factor));
+	// int scale_int = (int)(std::ceil(scale_factor));
     
     // Perform the affine transformation
     cv::Mat result;
-    cv::warpAffine(image, result, rot_mat, cv::Size(image.cols*scale_int, image.rows*scale_int), cv::INTER_LINEAR);
+    cv::warpAffine(image, result, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_LINEAR); // TODO: image.cols*scale_int for adjustable array size
     
     return result;
 }
