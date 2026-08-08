@@ -21,19 +21,20 @@ class ImageFeedSubscriber(Node):
       10)
     self.subscription # prevent unused variable warning
     self.br = CvBridge()
-    
-    # # Save image
-    # t = datetime.now()
-    # self.saved_img_folder = t.isoformat(timespec='milliseconds')
-    # os.makedirs(os.path.join("./out", self.saved_img_folder), exist_ok=True)
-    # self.create_timer(self.timer_save_img_period, self.save_image_process)
 
     print("pycam node")
     
   def listener_callback(self, data):
     self.current_frame = cv2.cvtColor(self.br.imgmsg_to_cv2(data), cv2.COLOR_RGB2BGR)
     cv2.imshow("camera", self.current_frame)
-    cv2.waitKey(1)
+    
+    # Save image
+    t = datetime.now()
+    self.saved_img_folder = t.isoformat(timespec='milliseconds')
+    os.makedirs(os.path.join("./out", self.saved_img_folder), exist_ok=True)
+    self.create_timer(self.timer_save_img_period, self.save_image_process)
+    
+    cv2.waitKey(0)
     
   def save_image_process(self):
     if (self.current_frame is not None):

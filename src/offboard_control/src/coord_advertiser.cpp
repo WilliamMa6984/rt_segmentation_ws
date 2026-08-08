@@ -8,6 +8,7 @@
 #include <tf2/LinearMath/Matrix3x3.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <cmath>
 
 #include <image_transport/image_transport.hpp>
 #include <cv_bridge/cv_bridge.h>
@@ -22,7 +23,7 @@ using namespace nav_msgs::msg;
 using namespace sensor_msgs::msg;
 using std::placeholders::_1;
 
-cv::Mat rotate_image(const cv::Mat& image, double angle);
+cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd);
 
 class CoordAdvertiser : public rclcpp::Node
 {
@@ -50,7 +51,7 @@ public:
 			occuGrid.header.stamp = rclcpp::Clock().now();
 			occuGrid.header.frame_id = "map";
 
-			occuGrid.info.resolution = 1.7/DETECTION_SZ;
+			occuGrid.info.resolution = MAP_RESOLUTION;
 			// occuGrid.info.resolution = 1;
 
 			occuGrid.info.width = DETECTION_SZ;
@@ -160,8 +161,8 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv::MatIterator_<uint8_t> it, end;
 	int matArray_i;
 
-	// Ignore if pitch too high
-	if (pitch > 0.087) {
+	// Ignore if roll or pitch too high
+	if (pitch > 0.1745 || roll > 0.1745) { // 10 deg
 		return;
 	}
 
@@ -178,7 +179,7 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	// Retrieved 2026-07-26, License - CC BY-SA 4.0
 	cv::transpose(cv_ptr->image, temp);
 	cv::flip(temp, cv_img, -1);
-	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI);
+	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI, lidarDist);
 
 	matArray_i = 0;
 	for ( it = cv_img_rot.begin<uint8_t>(), end = cv_img_rot.end<uint8_t>(); it != end; ++it ) {
@@ -198,16 +199,33 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 // Retrieved 2026-07-29, License - CC BY-SA 4.0
 //
 // Function to rotate image about its centre
-cv::Mat rotate_image(const cv::Mat& image, double angle) {
+cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd) {
     // image.cols is width, image.rows is height
     cv::Point2f image_center(image.cols / 2.0f, image.rows / 2.0f);
+
+	// Focal lengths
+    int w = image.cols; // image_width_in_pixels
+    double fov = 1.74; // field_of_view_in_rad
+    double f = (w * 0.5) / std::tan(fov * 0.5); // focal_length_in_pixels
+
+    double th = std::atan2(w,f);
+
+    double wp = dist_from_gnd*std::tan(th); // width' m
+
+    double scale_factor = wp / w; // Only for square ratio images
+
+    // // Currently 1px:1m ratio
+    // // Make ratio 1px:X m
+    // scale_factor = scale_factor / MAP_RESOLUTION;
     
     // Get the 2x3 rotation matrix
-    cv::Mat rot_mat = cv::getRotationMatrix2D(image_center, angle, 1.0);
+    cv::Mat rot_mat = cv::getRotationMatrix2D(image_center, angle, scale_factor);
+
+	int scale_int = (int)(std::ceil(scale_factor));
     
     // Perform the affine transformation
     cv::Mat result;
-    cv::warpAffine(image, result, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_LINEAR);
+    cv::warpAffine(image, result, rot_mat, cv::Size(image.cols*scale_int, image.rows*scale_int), cv::INTER_LINEAR);
     
     return result;
 }

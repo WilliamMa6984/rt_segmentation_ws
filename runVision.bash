@@ -11,5 +11,7 @@ gnome-terminal --tab --title='Bridge' -- bash -ic "ros2 run ros_gz_bridge parame
 
 gnome-terminal --tab --title='GZ' -- bash -ic "cd $HOME/PX4-Autopilot/; HEADLESS=1 PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="5.05,3.24,32.31,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 
-ros2 run vision predictCam
-# ros2 run vision pycam
+# gnome-terminal --tab --title='GZ' -- bash -ic "cd $HOME/PX4-Autopilot/; HEADLESS=1 PX4_GZ_WORLD=robbos PX4_GZ_MODEL_POSE="-9.0,-10.0,32.36,0,0,0" make px4_sitl gz_x500_segment_cam_down"
+
+# ros2 run vision predictCam
+ros2 run vision pycam
