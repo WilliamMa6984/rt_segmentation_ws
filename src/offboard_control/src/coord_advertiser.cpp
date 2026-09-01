@@ -23,7 +23,7 @@ using namespace nav_msgs::msg;
 using namespace sensor_msgs::msg;
 using std::placeholders::_1;
 
-cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd);
+cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, double tx, double ty);
 
 class CoordAdvertiser : public rclcpp::Node
 {
@@ -45,8 +45,12 @@ public:
 		prediction_subscriber_ = this->create_subscription<sensor_msgs::msg::Image>("/predictor/image_100", qos,
       		std::bind(&CoordAdvertiser::predictor_callback, this, _1));
 
+		std::fill(std::begin(detection_map), std::end(detection_map), 0);
+
 		auto timer_callback = [this]()->void {
 			auto occuGrid = OccupancyGrid();
+			cv::MatIterator_<uint8_t> it, end;
+			int matArray_i;
 
 			occuGrid.header.stamp = rclcpp::Clock().now();
 			occuGrid.header.frame_id = "map";
@@ -57,15 +61,25 @@ public:
 			occuGrid.info.width = DETECTION_SZ;
 			occuGrid.info.height = DETECTION_SZ;
 
-			occuGrid.info.origin.position.x = -east;
-			occuGrid.info.origin.position.y = -north;
+			occuGrid.info.origin.position.x = 0.0;
+			occuGrid.info.origin.position.y = 0.0;
 			occuGrid.info.origin.position.z = 0.0;
 			occuGrid.info.origin.orientation.x = 0.0;
 			occuGrid.info.origin.orientation.y = 0.0;
 			occuGrid.info.origin.orientation.z = 0.0;
 			occuGrid.info.origin.orientation.w = 0.0;
 
-			std::copy(&predict_img100_data[0], &predict_img100_data[DETECTION_SZ*DETECTION_SZ], back_inserter(occuGrid.data));
+			matArray_i = 0;
+			for ( it = detection_map_img.begin<uint8_t>(), end = detection_map_img.end<uint8_t>(); it != end; ++it ) {
+				if (matArray_i >= DETECTION_SZ*DETECTION_SZ) {
+					RCLCPP_INFO(this->get_logger(), "predictor_callback exception: matArray_i exceeds array index");
+					std::cout << "i: " + std::to_string(matArray_i) + "\n" + "x: " + std::to_string(detection_map_img.cols) + "\n" + "y: " + std::to_string(detection_map_img.rows) + "\n" << std::endl;
+					break;
+				}
+				detection_map[matArray_i] = *it;
+				matArray_i++;
+			}
+			std::copy(&detection_map[0], &detection_map[DETECTION_SZ*DETECTION_SZ], back_inserter(occuGrid.data));
 
 			this->occupancy_grid_publisher_->publish(occuGrid);
 			
@@ -106,7 +120,8 @@ private:
 
 	float lidarDist = 0.0f;
 
-	uint8_t predict_img100_data[DETECTION_SZ*DETECTION_SZ]; // 100x100 image
+	uint8_t detection_map[DETECTION_SZ*DETECTION_SZ]; // detection map
+	cv::Mat detection_map_img = cv::Mat::zeros(cv::Size(DETECTION_SZ, DETECTION_SZ),CV_8UC1);
 
 	void position_callback(VehicleLocalPosition msg);
 	void attitude_callback(VehicleAttitude msg);
@@ -158,13 +173,11 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv::Mat cv_img;
 	cv::Mat temp;
 	cv::Mat cv_img_rot;
-	cv::MatIterator_<uint8_t> it, end;
-	int matArray_i;
 
 	// Ignore if roll or pitch too high
 	if (std::abs(pitch) > 0.13 || std::abs(roll) > 0.13) { // 5 deg
 		// return empty detection
-		std::fill(std::begin(predict_img100_data), std::end(predict_img100_data), 0);
+		// std::fill(std::begin(detection_map), std::end(detection_map), 0);
 		return;
 	}
 
@@ -181,19 +194,11 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	// Retrieved 2026-07-26, License - CC BY-SA 4.0
 	cv::transpose(cv_ptr->image, temp);
 	cv::flip(cv_ptr->image, cv_img, 0);
-	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI, lidarDist);
+	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI, lidarDist, east, north);
 
-	matArray_i = 0;
-	for ( it = cv_img_rot.begin<uint8_t>(), end = cv_img_rot.end<uint8_t>(); it != end; ++it ) {
-		if (matArray_i >= DETECTION_SZ*DETECTION_SZ) {
-			RCLCPP_INFO(this->get_logger(), "predictor_callback exception: matArray_i exceeds array index");
-		}
-		predict_img100_data[matArray_i] = *it;
-		matArray_i++;
-	}
-
+	cv::add(detection_map_img, cv_img_rot, detection_map_img);
 	// std::cout << "c: " +
-	// std::to_string(predict_img100_data[0]) + "\n" << std::endl;
+	// std::to_string(detection_map[0]) + "\n" << std::endl;
 }
 
 // Source - https://stackoverflow.com/a/9042907
@@ -201,9 +206,10 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 // Retrieved 2026-07-29, License - CC BY-SA 4.0
 //
 // Function to rotate image about its centre
-cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd) {
+cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, double tx, double ty) {
     // image.cols is width, image.rows is height
     cv::Point2f image_center(image.cols / 2.0f, image.rows / 2.0f);
+	cv::Size result_sz = cv::Size(DETECTION_SZ, DETECTION_SZ);
 
 	// Focal lengths
     int w = image.cols; // image_width_in_pixels
@@ -223,12 +229,19 @@ cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd) {
     // Get the 2x3 rotation matrix
     cv::Mat rot_mat = cv::getRotationMatrix2D(image_center, angle, scale_factor);
 
-	// int scale_int = (int)(std::ceil(scale_factor));
-    
     // Perform the affine transformation
-    cv::Mat result;
-    cv::warpAffine(image, result, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_LINEAR); // TODO: image.cols*scale_int for adjustable array size
+    cv::Mat img_rot;
+    cv::warpAffine(image, img_rot, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_LINEAR); // TODO: image.cols*scale_int for adjustable array size
     
+	// Translate image
+	// TODO: move to origin->from global start coords
+	double origin_x = 5;
+	double origin_y = 5;
+    cv::Mat trans_mat = (cv::Mat_<float>(2,3) << 1, 0, tx+origin_x, 0, 1, ty+origin_y);
+    // Apply translation
+    cv::Mat result;
+    cv::warpAffine(img_rot, result, trans_mat, result_sz);
+ 
     return result;
 }
 
