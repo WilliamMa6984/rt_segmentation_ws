@@ -1,14 +1,13 @@
 #include <chrono>
 #include <rclcpp/rclcpp.hpp>
 #include <px4_msgs/msg/debug_vect.hpp>
-#include <px4_msgs/msg/vehicle_local_position.hpp>
-#include <px4_msgs/msg/vehicle_attitude.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2/LinearMath/Matrix3x3.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <cmath>
+#include <std_msgs/msg/float32_multi_array.hpp>
 
 #include <image_transport/image_transport.hpp>
 #include <cv_bridge/cv_bridge.h>
@@ -20,6 +19,7 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 using namespace nav_msgs::msg;
+using namespace std_msgs::msg;
 using namespace sensor_msgs::msg;
 using std::placeholders::_1;
 
@@ -36,14 +36,12 @@ public:
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 
-		vehicle_pos_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position_v1", qos,
-      		std::bind(&CoordAdvertiser::position_callback, this, _1));
-		vehicle_attitude_subscriber_ = this->create_subscription<VehicleAttitude>("/fmu/out/vehicle_attitude", qos,
-      		std::bind(&CoordAdvertiser::attitude_callback, this, _1));
 		lidar_subscriber_ = this->create_subscription<LaserScan>("/lidar", qos,
       		std::bind(&CoordAdvertiser::lidar_callback, this, _1));
 		prediction_subscriber_ = this->create_subscription<sensor_msgs::msg::Image>("/predictor/image_100", qos,
       		std::bind(&CoordAdvertiser::predictor_callback, this, _1));
+		pose_subscriber_ = this->create_subscription<std_msgs::msg::Float32MultiArray>("/predictor/robot_pose", qos,
+      		std::bind(&CoordAdvertiser::pose_callback, this, _1));
 
 		std::fill(std::begin(detection_map), std::end(detection_map), 0);
 
@@ -105,10 +103,9 @@ private:
 	rclcpp::TimerBase::SharedPtr timer_;
 	rclcpp::Publisher<OccupancyGrid>::SharedPtr occupancy_grid_publisher_;
 
-	rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_pos_subscriber_;
-	rclcpp::Subscription<VehicleAttitude>::SharedPtr vehicle_attitude_subscriber_;
 	rclcpp::Subscription<LaserScan>::SharedPtr lidar_subscriber_;
 	rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr prediction_subscriber_;
+	rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr pose_subscriber_;
 
 	float north = 0.0f;
 	float east = 0.0f;
@@ -123,35 +120,10 @@ private:
 	uint8_t detection_map[DETECTION_SZ*DETECTION_SZ]; // detection map
 	cv::Mat detection_map_img = cv::Mat::zeros(cv::Size(DETECTION_SZ, DETECTION_SZ),CV_8UC1);
 
-	void position_callback(VehicleLocalPosition msg);
-	void attitude_callback(VehicleAttitude msg);
 	void lidar_callback(LaserScan msg);
 	void predictor_callback(sensor_msgs::msg::Image msg);
+	void pose_callback(std_msgs::msg::Float32MultiArray msg);
 };
-
-/**
- * @brief Subscribe vehicle local position
- * @param 
- */
-void CoordAdvertiser::position_callback(const VehicleLocalPosition msg)
-{
-	north = msg.x;
-	east = msg.y;
-	down = msg.z;
-}
-
-/**
- * @brief Subscribe vehicle attitude
- * @param 
- */
-void CoordAdvertiser::attitude_callback(const VehicleAttitude msg)
-{
-	// Quaternion: w x y z
-	tf2::Quaternion q(msg.q[1], msg.q[2], msg.q[3], msg.q[0]);
-	tf2::Matrix3x3 m(q);
-
-	m.getRPY(roll, pitch, yaw, 1);
-}
 
 /**
  * @brief Subscribe lidar sensor
@@ -162,6 +134,19 @@ void CoordAdvertiser::lidar_callback(const LaserScan msg)
 	std::vector<float> ranges = msg.ranges;
 
 	lidarDist = ranges.front();
+}
+
+/**
+ * @brief Subscribe to pose during position
+ * @param 
+ */
+void CoordAdvertiser::pose_callback(const std_msgs::msg::Float32MultiArray msg) {
+	north = msg.data[0];
+	east = msg.data[1];
+	down = msg.data[2];
+	roll = msg.data[3];
+	pitch = msg.data[4];
+	yaw = msg.data[5];
 }
 
 /**
@@ -192,11 +177,11 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	// Source - https://stackoverflow.com/a/65835875
 	// Posted by stateMachine, modified by community. See post 'Timeline' for change history
 	// Retrieved 2026-07-26, License - CC BY-SA 4.0
-	cv::transpose(cv_ptr->image, temp);
 	cv::flip(cv_ptr->image, cv_img, 0);
 	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI, lidarDist, east, north);
+	cv::rotate(cv_img_rot, detection_map_img, cv::ROTATE_90_COUNTERCLOCKWISE);
 
-	cv::add(detection_map_img, cv_img_rot, detection_map_img);
+	// cv::add(detection_map_img, cv_img_rot, detection_map_img);
 	// std::cout << "c: " +
 	// std::to_string(detection_map[0]) + "\n" << std::endl;
 }
@@ -235,8 +220,8 @@ cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, d
     
 	// Translate image
 	// TODO: move to origin->from global start coords
-	double origin_x = 5;
-	double origin_y = 5;
+	double origin_x = 0;
+	double origin_y = 0;
     cv::Mat trans_mat = (cv::Mat_<float>(2,3) << 1, 0, tx+origin_x, 0, 1, ty+origin_y);
     // Apply translation
     cv::Mat result;
