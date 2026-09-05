@@ -1,3 +1,3 @@
 #define MAP_SZ_M 60.0
 #define MAP_RESOLUTION 0.5 // 1px:m
-#define DETECTION_SZ (int)(MAP_SZ_M/MAP_RESOLUTION+10)
+#define DETECTION_SZ (int)(MAP_SZ_M/MAP_RESOLUTION)

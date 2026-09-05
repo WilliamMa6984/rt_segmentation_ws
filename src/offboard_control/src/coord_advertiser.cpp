@@ -23,8 +23,6 @@ using namespace std_msgs::msg;
 using namespace sensor_msgs::msg;
 using std::placeholders::_1;
 
-cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, double tx, double ty);
-
 class CoordAdvertiser : public rclcpp::Node
 {
 public:
@@ -123,6 +121,9 @@ private:
 	void lidar_callback(LaserScan msg);
 	void predictor_callback(sensor_msgs::msg::Image msg);
 	void pose_callback(std_msgs::msg::Float32MultiArray msg);
+
+	// std::tuple<cv::Mat, cv::Mat> rotate_image
+	cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, double tx, double ty);
 };
 
 /**
@@ -158,6 +159,9 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv::Mat cv_img;
 	cv::Mat temp;
 	cv::Mat cv_img_rot;
+	// cv::Mat mask;
+	// cv::Mat mask_rot;
+	// cv::Mat blended;
 
 	// Ignore if roll or pitch too high
 	if (std::abs(pitch) > 0.13 || std::abs(roll) > 0.13) { // 5 deg
@@ -181,9 +185,19 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 	cv_img_rot = rotate_image(cv_img, yaw*180.0/CV_PI, lidarDist, east, north);
 	cv::rotate(cv_img_rot, detection_map_img, cv::ROTATE_90_COUNTERCLOCKWISE);
 
-	// cv::add(detection_map_img, cv_img_rot, detection_map_img);
-	// std::cout << "c: " +
-	// std::to_string(detection_map[0]) + "\n" << std::endl;
+	// std::tie(temp, mask) = rotate_image(cv_img, yaw*180.0/CV_PI, lidarDist, east, north);
+	// cv::rotate(temp, cv_img, cv::ROTATE_90_COUNTERCLOCKWISE);
+	// cv::rotate(mask, mask_rot, cv::ROTATE_90_COUNTERCLOCKWISE);
+
+	// // 1. Calculate the element-wise average of both images
+	// cv::add(cv_img*0.25, detection_map_img*0.75, cv_img, mask_rot);
+	// // 2. Copy the blended pixels into the destination ONLY within the mask region
+    // cv_img.copyTo(detection_map_img, mask_rot);
+	// // detection_map_img = mask;
+	// // cv_img_rot = 
+
+	// // Get maximum
+	// // cv::max(detection_map_img, cv_img_rot, detection_map_img);
 }
 
 // Source - https://stackoverflow.com/a/9042907
@@ -191,7 +205,7 @@ void CoordAdvertiser::predictor_callback(const sensor_msgs::msg::Image msg) {
 // Retrieved 2026-07-29, License - CC BY-SA 4.0
 //
 // Function to rotate image about its centre
-cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, double tx, double ty) {
+cv::Mat CoordAdvertiser::rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, double tx, double ty) {
     // image.cols is width, image.rows is height
     cv::Point2f image_center(image.cols / 2.0f, image.rows / 2.0f);
 	cv::Size result_sz = cv::Size(DETECTION_SZ, DETECTION_SZ);
@@ -218,16 +232,28 @@ cv::Mat rotate_image(const cv::Mat& image, double angle, double dist_from_gnd, d
     cv::Mat img_rot;
     cv::warpAffine(image, img_rot, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_LINEAR); // TODO: image.cols*scale_int for adjustable array size
     
+	// // 3. Create a solid white mask of the source image to track its transformation
+    // cv::Mat mask_src = cv::Mat::ones(image.size(), CV_8UC1) * 255;
+    // cv::Mat mask_rot;
+    // cv::warpAffine(mask_src, mask_rot, rot_mat, cv::Size(image.cols, image.rows), cv::INTER_NEAREST);
+
 	// Translate image
 	// TODO: move to origin->from global start coords
 	double origin_x = 0;
 	double origin_y = 0;
-    cv::Mat trans_mat = (cv::Mat_<float>(2,3) << 1, 0, tx+origin_x, 0, 1, ty+origin_y);
-    // Apply translation
+    cv::Mat trans_mat = (cv::Mat_<float>(2,3) << 1, 0, tx/MAP_RESOLUTION+origin_x, 0, 1, ty/MAP_RESOLUTION+origin_y);
     cv::Mat result;
-    cv::warpAffine(img_rot, result, trans_mat, result_sz);
- 
-    return result;
+	cv::warpAffine(img_rot, result, trans_mat, result_sz, cv::INTER_LINEAR);
+
+    // // Apply translation
+    // // 5. Apply translation to BOTH the rotated image and its mask
+    // cv::Mat final_img;
+    // cv::Mat final_mask;
+    // cv::warpAffine(img_rot, final_img, trans_mat, result_sz, cv::INTER_LINEAR);
+    // cv::warpAffine(mask_rot, final_mask, trans_mat, result_sz, cv::INTER_LINEAR);
+	
+    // return {final_img, final_mask};
+	return result;
 }
 
 int main(int argc, char *argv[])

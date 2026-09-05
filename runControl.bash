@@ -9,5 +9,5 @@ source install/local_setup.bash
 
 # gnome-terminal --tab --title='Bridge' -- bash -ic "ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=bridge_config/sensor_bridge.yaml"
 
-# ros2 run offboard_control control
+# gnome-terminal --tab --title='Control' -- bash -ic "ros2 run offboard_control control"
 ros2 run offboard_control coord_advertiser
