@@ -29,7 +29,8 @@ setup(
     entry_points={
         'console_scripts': [
             'pycam = vision.pycam:main',
-            'predictCam = vision.predictCam:main'
+            'predictCam = vision.predictCam:main',
+            'ocgridAdvertiser = vision.ocgrid_advertiser:main'
         ],
     },
 )
