@@ -15,6 +15,9 @@ from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32MultiArray
 from px4_msgs.msg import VehicleLocalPosition
 
+import matplotlib.pyplot as plt
+from ament_index_python.packages import get_package_share_directory
+import os
 
 MAP_SZ_M = 60.0
 MAP_RESOLUTION = 0.5
@@ -86,7 +89,13 @@ class OCGridAdvertiser(Node):
         self.bridge = CvBridge()
         self.timer = self.create_timer(0.2, self.publish_occupancy_grid)
 
+        # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
+        self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
+
         self.get_logger().info('coord_advertiser node')
+
+        if self.map is None:
+            self.get_logger().error("Image failed to load! Check the file path.")
 
 # @brief Subscribe vehicle local position
 # @param 
@@ -119,8 +128,8 @@ class OCGridAdvertiser(Node):
 # Get predictor image, transform it, and store it for publishing as an occupancy grid
     def predictor_callback(self, msg):
         # Ignore predictor images if the robot is tilted too much
-        # if abs(self.pitch) > 0.13 or abs(self.roll) > 0.13:
-        #     return
+        if abs(self.pitch) > 0.13 or abs(self.roll) > 0.13:
+            return
 
         try:
             image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
@@ -142,7 +151,7 @@ class OCGridAdvertiser(Node):
         image_height, image_width = image.shape[:2]
         image_center = (image_width / 2.0, image_height / 2.0)
 
-        fov = 1.74
+        fov = 1.5
         focal_length = (image_width * 0.5) / math.tan(fov * 0.5)
         theta = math.atan2(image_width, focal_length)
         projected_width = dist_from_gnd * math.tan(theta)
@@ -191,6 +200,16 @@ class OCGridAdvertiser(Node):
         # self.occupancy_grid_publisher.publish(occupancy_grid)
         occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img , encoding="mono8")
         self.occupancy_grid_publisher.publish(occ_img_msg)
+
+        # Verify against precompute map
+        # detection_map_img_ = cv2.cvtColor(self.detection_map_img, cv2.COLOR_GRAY2BGR)
+        # detection_map_img_[:, :, 0] = 0  # Blue = 0
+        # detection_map_img_[:, :, 2] = 0  # Red = 0
+
+        # blended = cv2.addWeighted(self.map, 0.2, detection_map_img_, 0.8, 0)
+        # plt.imshow(blended)
+        # plt.imshow(self.detection_map_img, cmap='gray')
+        # plt.pause(0.05)
 
         self.get_logger().info(
             f'Pos (NED): {self.north} {self.east} {self.down}\n'

@@ -14,6 +14,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'checkpoints'), glob('checkpoints/checkpoint_epoch10.pth')),
         (os.path.join('share', package_name, 'checkpoints'), glob('checkpoints/checkpoint_epoch10_960p.pth')),
+        (os.path.join('share', package_name), glob('map.png')),
+        (os.path.join('share', package_name), glob('map_mask.png')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
