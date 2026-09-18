@@ -82,8 +82,17 @@ class OCGridAdvertiser(Node):
         self.origin_north = 0.0
         self.origin_east = 0.0
         self.lidar_dist = 0.0
-        self.detection_map = np.zeros(DETECTION_SZ * DETECTION_SZ, dtype=np.uint8)
+        # self.detection_map = np.zeros(DETECTION_SZ * DETECTION_SZ, dtype=np.uint8)
         self.detection_map_img = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        )
+        self.detection_map_img_historic = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        )
+        self.detection_map_mask = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        )
+        self.detection_map_mask_historic = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
         self.bridge = CvBridge()
@@ -128,7 +137,7 @@ class OCGridAdvertiser(Node):
 # Get predictor image, transform it, and store it for publishing as an occupancy grid
     def predictor_callback(self, msg):
         # Ignore predictor images if the robot is tilted too much
-        if abs(self.pitch) > 0.13 or abs(self.roll) > 0.13:
+        if abs(self.pitch) > 0.06 or abs(self.roll) > 0.06:
             return
 
         try:
@@ -137,14 +146,13 @@ class OCGridAdvertiser(Node):
             self.get_logger().info('cv_bridge exception')
             return
 
-        self.detection_map_img = self.rotate_image(
+        self.detection_map_img, self.detection_map_mask = self.rotate_image(
             image,
             -math.degrees(self.yaw),
             self.lidar_dist,
             self.east+self.origin_east,
             self.north+self.origin_north,
-        ) # -(DETECTION_SZ*MAP_RESOLUTION/2)
-        # 5.05,3.24
+        )
 
 # Rotate and translate the image based on robot pose and lidar distance
     def rotate_image(self, image, angle, dist_from_gnd, tx, ty):
@@ -157,6 +165,9 @@ class OCGridAdvertiser(Node):
         projected_width = dist_from_gnd * math.tan(theta)
         scale_factor = projected_width / image_width / MAP_RESOLUTION
 
+        mask = np.ones((image_height, image_width), dtype=np.uint8) * 255
+
+        # Rotate and scale image based on yaw and distance from ground
         rotation_matrix = cv2.getRotationMatrix2D(
             image_center, angle, scale_factor
         )
@@ -166,19 +177,36 @@ class OCGridAdvertiser(Node):
             (image_width, image_height),
             flags=cv2.INTER_LINEAR,
         )
+        # Same with mask
+        mask = cv2.warpAffine(
+            mask,
+            rotation_matrix,
+            (image_width, image_height),
+            flags=cv2.INTER_LINEAR,
+        )
 
+        # Translate to map location
         center_x = (DETECTION_SZ - image_width) / 2.0
         center_y = (DETECTION_SZ - image_height) / 2.0
         translation_matrix = np.float32([
             [1, 0, center_x + tx / MAP_RESOLUTION],
             [0, 1, center_y - ty / MAP_RESOLUTION],
         ])
-        return cv2.warpAffine(
+        rotated_image = cv2.warpAffine(
             rotated_image,
             translation_matrix,
             (DETECTION_SZ, DETECTION_SZ),
             flags=cv2.INTER_LINEAR,
         )
+        # Same with mask
+        mask = cv2.warpAffine(
+            mask,
+            translation_matrix,
+            (DETECTION_SZ, DETECTION_SZ),
+            flags=cv2.INTER_LINEAR,
+        ) > 0
+
+        return rotated_image, mask
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
@@ -198,8 +226,17 @@ class OCGridAdvertiser(Node):
         # occupancy_grid.info.origin.orientation.w = 0.0
         # occupancy_grid.data = self.detection_map.view(np.int8).tolist()
         # self.occupancy_grid_publisher.publish(occupancy_grid)
-        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img , encoding="mono8")
+
+        blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
+        self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
+        self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
+
+        # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
+        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
         self.occupancy_grid_publisher.publish(occ_img_msg)
+
+        plt.imshow(self.detection_map_mask_historic)
+        plt.pause(0.05)
 
         # Verify against precompute map
         # detection_map_img_ = cv2.cvtColor(self.detection_map_img, cv2.COLOR_GRAY2BGR)
