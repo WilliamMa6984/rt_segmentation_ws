@@ -10,14 +10,18 @@
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
+#include <geographic_msgs/msg/geo_point.hpp>
 
 #include <chrono>
 #include <iostream>
 #include <math.h>
 
+#include "parameters.h"
+
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
+using namespace geographic_msgs::msg;
 using std::placeholders::_1;
 
 class OffboardControl : public rclcpp::Node
@@ -26,11 +30,15 @@ public:
 	OffboardControl() : Node("offboard_control")
 	{
 
+		
+
 		offboard_control_mode_publisher_ = this->create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
 		goto_setpoint_publisher_ = this->create_publisher<GotoSetpoint>("/fmu/in/goto_setpoint", 10);
 		vehicle_command_publisher_ = this->create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
+		ugv_position_subscriber_ = this->create_subscription<GeoPoint>("/ugv/global_position", qos,
+      		std::bind(&OffboardControl::ugv_position_callback, this, _1));
 		vehicle_position_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position_v1", qos,
       		std::bind(&OffboardControl::position_callback, this, _1));
 		vehicle_stat_subscriber_ = this->create_subscription<VehicleStatus>("/fmu/out/vehicle_status_v4", qos,
@@ -43,7 +51,8 @@ public:
 				if (msg->timestamp > 1000000 && msg->arming_state == 1) {
 					// Change to Offboard mode (2 seconds after system start)
 					publish_offboard_control_mode();
-					publish_goto_setpoint(target_x, target_y, target_z);
+
+					publish_goto_setpoint(target_x+FOLLOW_OFFSET, target_y+FOLLOW_OFFSET, target_z);
 					
 					this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
@@ -59,7 +68,18 @@ public:
 			if (armed == true) {
 				// offboard_control_mode needs to be paired with goto_setpoint
 				publish_offboard_control_mode();
-				publish_goto_setpoint(target_x, target_y, target_z);
+
+				if (OffboardControl::magnitude(x-target_x, y-target_y, 0.0f) > FOLLOW_RADIUS) {
+					setpoint_x = target_x;
+					setpoint_y = target_y;
+
+					RCLCPP_INFO(this->get_logger(), "=========");
+					std::cout << "Out Target: " +
+					std::to_string(setpoint_x) + " " + 
+					std::to_string(setpoint_y) + "\n" << std::endl;
+				}
+
+				publish_goto_setpoint(setpoint_x, setpoint_y, setpoint_z);
 			}
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
@@ -74,15 +94,26 @@ public:
 private:
 	bool armed = false;
 	
+	float x = 0.0f;
+	float y = 0.0f;
+
 	float target_x = 0.0f;
 	float target_y = 0.0f;
-	const float target_z = -10.0; // Constant
+	const float target_z = -MISSION_HEIGHT; // Constant
+
+	float setpoint_x = 0.0f;
+	float setpoint_y = 0.0f;
+	const float setpoint_z = target_z; // Constant
+
+	float ref_lat = 0.0f;
+	float ref_lon = 0.0f;
 
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
 	rclcpp::Publisher<GotoSetpoint>::SharedPtr goto_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
+	rclcpp::Subscription<GeoPoint>::SharedPtr ugv_position_subscriber_;
 	rclcpp::Subscription<VehicleLocalPosition>::SharedPtr vehicle_position_subscriber_;
 	rclcpp::Subscription<VehicleStatus>::SharedPtr vehicle_stat_subscriber_;
 
@@ -94,7 +125,9 @@ private:
 	void publish_goto_setpoint(float x, float y, float z);
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0);
 	void position_callback(VehicleLocalPosition msg);
+	void ugv_position_callback(GeoPoint msg);
 	float magnitude(float x, float y, float z);
+	float radians(float d);
 	template <typename T> int sgn(T val);
 };
 
@@ -136,8 +169,6 @@ void OffboardControl::publish_offboard_control_mode()
 
 /**
  * @brief Publish a trajectory setpoint
- *        For this example, it sends a trajectory setpoint to make the
- *        vehicle hover at 5 meters with a yaw angle of 180 degrees.
  */
 void OffboardControl::publish_goto_setpoint(float x, float y, float z)
 {
@@ -146,7 +177,7 @@ void OffboardControl::publish_goto_setpoint(float x, float y, float z)
 	msg.flag_control_heading = false;
 	msg.heading = 0.0f;
 	msg.flag_set_max_horizontal_speed = true;
-	msg.max_horizontal_speed = 5.0f;
+	msg.max_horizontal_speed = MAX_SPEED;
 	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
 	goto_setpoint_publisher_->publish(msg);
 }
@@ -173,11 +204,29 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1, fl
 }
 
 /**
+ * @brief Subscribe UGV global position
+ * @param 
+ */
+void OffboardControl::ugv_position_callback(const GeoPoint msg)
+{
+	target_y = radians(msg.longitude - ref_lon) * EARTH_RADIUS * cos(radians(ref_lat));
+	target_x = radians(msg.latitude - ref_lat) * EARTH_RADIUS;
+}
+
+/**
  * @brief Subscribe vehicle position
  * @param 
  */
 void OffboardControl::position_callback(const VehicleLocalPosition msg)
 {
+	x = msg.x;
+	y = msg.y;
+
+	if (msg.xy_global==true && msg.z_global==true) {
+		ref_lat = msg.ref_lat;
+		ref_lon = msg.ref_lon;
+	}
+/*
 	const float x_step_size = 10.0f;
 	const float y_step_size = 15.0f;
 	float x = 0.0f;
@@ -212,6 +261,7 @@ void OffboardControl::position_callback(const VehicleLocalPosition msg)
 		std::to_string(target_x) + " " + 
 		std::to_string(target_y) + "\n" << std::endl;
 	}
+*/
 }
 
 // Source - https://stackoverflow.com/a/4609795
@@ -221,6 +271,10 @@ template <typename T> int OffboardControl::sgn(T val) {
     return (T(0) < val) - (val < T(0));
 }
 
+
+float OffboardControl::radians(float d) {
+  return (d / 180.0) * ((float) M_PI);
+}
 
 float OffboardControl::magnitude(float x, float y, float z)
 {

@@ -92,6 +92,7 @@ class OCGridAdvertiser(Node):
         self.detection_map_mask_historic = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
+        self.detection_pose = np.zeros((6,1))
         self.bridge = CvBridge()
         self.timer = self.create_timer(0.2, self.publish_occupancy_grid)
 
@@ -211,6 +212,17 @@ class OCGridAdvertiser(Node):
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
+        # Ignore if pose is similar to previous detection
+        curr_detection_pose = np.array([self.north, self.east, self.down, \
+                               self.roll, self.pitch, self.yaw])
+        if np.linalg.norm(self.detection_pose-curr_detection_pose) < 0.1:
+            self.detection_pose = curr_detection_pose
+            # print("norm: ", np.linalg.norm(self.detection_pose-curr_detection_pose))
+            # print("curr pose: ", curr_detection_pose)
+            # print("prev pose: ", self.detection_pose)
+            return
+        else:
+            self.detection_pose = curr_detection_pose
 
         blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
@@ -220,8 +232,8 @@ class OCGridAdvertiser(Node):
         occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
         self.occupancy_grid_publisher.publish(occ_img_msg)
 
-        plt.imshow(self.detection_map_mask_historic)
-        plt.pause(0.05)
+        # plt.imshow(self.detection_map_mask_historic)
+        # plt.pause(0.05)
 
         # Verify against precompute map
         # detection_map_img_ = cv2.cvtColor(self.detection_map_img, cv2.COLOR_GRAY2BGR)

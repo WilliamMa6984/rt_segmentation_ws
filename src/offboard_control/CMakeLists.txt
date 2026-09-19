@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(geographic_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -20,7 +21,7 @@ find_package(cv_bridge REQUIRED)
 
 # Lawnmower
 add_executable(control src/control.cpp)
-ament_target_dependencies(control rclcpp px4_msgs nav_msgs)
+ament_target_dependencies(control rclcpp px4_msgs nav_msgs geographic_msgs)
 target_include_directories(control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)

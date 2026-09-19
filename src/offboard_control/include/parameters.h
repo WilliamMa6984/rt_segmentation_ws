@@ -1,3 +1,10 @@
+#define MISSION_HEIGHT 10.0f
+#define FOLLOW_OFFSET 0.5f
+#define MAX_SPEED 0.6f
+#define FOLLOW_RADIUS 1.0f
+
 #define MAP_SZ_M 60.0
 #define MAP_RESOLUTION 0.5 // 1px:m
 #define DETECTION_SZ (int)(MAP_SZ_M/MAP_RESOLUTION)
+
+#define EARTH_RADIUS 6371000.0f
