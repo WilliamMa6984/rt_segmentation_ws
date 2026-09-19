@@ -11,7 +11,7 @@ from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 import rclpy.qos
-from sensor_msgs.msg import Image, LaserScan
+from sensor_msgs.msg import Image
 from std_msgs.msg import Float32MultiArray
 from px4_msgs.msg import VehicleLocalPosition
 
@@ -56,9 +56,6 @@ class OCGridAdvertiser(Node):
         self.occupancy_grid_publisher = self.create_publisher(
             Image, '/moss_occ_grid', 10
         )
-        self.lidar_subscriber = self.create_subscription(
-            LaserScan, '/lidar', self.lidar_callback, qos_profile_sensor_data
-        )
         self.prediction_subscriber = self.create_subscription(
             Image, '/predictor/image_100', self.predictor_callback,
             qos_profile_sensor_data
@@ -77,12 +74,12 @@ class OCGridAdvertiser(Node):
         self.east = 0.0
         self.down = 0.0
         self.pitch = 0.0
+        self.maxPitch = 0.0
         self.yaw = 0.0
         self.roll = 0.0
+        self.maxRoll = 0.0
         self.origin_north = 0.0
         self.origin_east = 0.0
-        self.lidar_dist = 0.0
-        # self.detection_map = np.zeros(DETECTION_SZ * DETECTION_SZ, dtype=np.uint8)
         self.detection_map_img = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
@@ -120,11 +117,6 @@ class OCGridAdvertiser(Node):
             self.destroy_subscription(self.position_subscription)
             self.position_subscription = None
 
-# Get lidar distance to ground
-    def lidar_callback(self, msg):
-        if msg.ranges:
-            self.lidar_dist = msg.ranges[0]
-
 # Get robot pose (NED) and orientation (RPY)
     def pose_callback(self, msg):
         if len(msg.data) < 6:
@@ -134,10 +126,15 @@ class OCGridAdvertiser(Node):
         self.north, self.east, self.down = msg.data[:3]
         self.roll, self.pitch, self.yaw = msg.data[3:6]
 
+        self.maxPitch = max(self.maxPitch, self.pitch)
+        self.maxRoll = max(self.maxRoll, self.roll)
+
 # Get predictor image, transform it, and store it for publishing as an occupancy grid
     def predictor_callback(self, msg):
+        print("============")
+
         # Ignore predictor images if the robot is tilted too much
-        if abs(self.pitch) > 0.06 or abs(self.roll) > 0.06:
+        if abs(self.pitch) > 0.087 or abs(self.roll) > 0.087:
             return
 
         try:
@@ -146,10 +143,14 @@ class OCGridAdvertiser(Node):
             self.get_logger().info('cv_bridge exception')
             return
 
+        # Ignore if empty detection or inf dist to ground (out of map)
+        if (np.isinf(self.down) or self.down==0 or np.max(image) == 0):
+            return
+
         self.detection_map_img, self.detection_map_mask = self.rotate_image(
             image,
             -math.degrees(self.yaw),
-            self.lidar_dist,
+            self.down,
             self.east+self.origin_east,
             self.north+self.origin_north,
         )
@@ -210,22 +211,6 @@ class OCGridAdvertiser(Node):
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
-        # flattened_image = self.detection_map_img.reshape(-1)
-        # copy_size = min(flattened_image.size, self.detection_map.size)
-        # self.detection_map[:copy_size] = flattened_image[:copy_size]
-
-        # occupancy_grid = OccupancyGrid()
-        # occupancy_grid.header.stamp = self.get_clock().now().to_msg()
-        # occupancy_grid.header.frame_id = 'map'
-        # occupancy_grid.info.resolution = MAP_RESOLUTION
-        # occupancy_grid.info.width = DETECTION_SZ
-        # occupancy_grid.info.height = DETECTION_SZ
-        # occupancy_grid.info.origin.position.x = 0.0
-        # occupancy_grid.info.origin.position.y = 0.0
-        # occupancy_grid.info.origin.position.z = 0.0
-        # occupancy_grid.info.origin.orientation.w = 0.0
-        # occupancy_grid.data = self.detection_map.view(np.int8).tolist()
-        # self.occupancy_grid_publisher.publish(occupancy_grid)
 
         blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
@@ -252,7 +237,7 @@ class OCGridAdvertiser(Node):
             f'Pos (NED): {self.north} {self.east} {self.down}\n'
             f'RPY: {self.roll} {self.pitch} {self.yaw}\n'
             f'Ref north/east: {self.origin_north} {self.origin_east}\n'
-            f'Dist to gnd: {self.lidar_dist}'
+            f'Max tilts (RP): {self.maxRoll} {self.maxPitch}'
         )
 
 

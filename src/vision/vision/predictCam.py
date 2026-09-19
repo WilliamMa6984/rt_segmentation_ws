@@ -1,7 +1,7 @@
 import rclpy
 import rclpy.qos as QoS
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, LaserScan
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -12,6 +12,8 @@ from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Float32MultiArray
 from px4_msgs.msg import VehicleLocalPosition
 from px4_msgs.msg import VehicleAttitude
+
+from rclpy.qos import qos_profile_sensor_data
 
 import vision.predict as predict
   
@@ -29,6 +31,7 @@ class ImagePredictorSubscriber(Node):
   roll = 0.0
   pitch = 0.0
   yaw = 0.0
+  lidar_dist = 0.0
 
   def __init__(self):
     super().__init__('predictor_subscriber')
@@ -41,6 +44,9 @@ class ImagePredictorSubscriber(Node):
         depth=1
     )
 
+    self.lidar_subscriber = self.create_subscription(
+        LaserScan, '/lidar', self.lidar_callback, qos_profile_sensor_data
+    )
     self.subscription = self.create_subscription(
       Image, 
       '/camera/image', 
@@ -130,7 +136,12 @@ class ImagePredictorSubscriber(Node):
     if (msg is not None):
       self.north = msg.x
       self.east = msg.y
-      self.down = msg.z
+      # self.down = msg.z
+
+# Get lidar distance to ground
+  def lidar_callback(self, msg):
+    if msg.ranges:
+        self.down = msg.ranges[0]
     
 # @brief Subscribe vehicle attitude
 # @param 
