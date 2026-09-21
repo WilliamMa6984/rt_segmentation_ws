@@ -135,7 +135,7 @@ class OCGridAdvertiser(Node):
         print("============")
 
         # Ignore predictor images if the robot is tilted too much
-        if abs(self.pitch) > 0.087 or abs(self.roll) > 0.087:
+        if abs(self.pitch) > 0.065 or abs(self.roll) > 0.065:
             return
 
         try:
@@ -148,6 +148,16 @@ class OCGridAdvertiser(Node):
         if (np.isinf(self.down) or self.down==0 or np.max(image) == 0):
             return
 
+        # Ignore if pose is similar to previous detection
+        curr_pose = np.array([self.north, self.east, self.down, \
+                               self.roll, self.pitch, self.yaw])
+        if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
+            # self.detection_pose = curr_pose
+            return
+        else: # continue
+            self.detection_pose = curr_pose
+        
+        # Process (rotate + translate) moss seg. image
         self.detection_map_img, self.detection_map_mask = self.rotate_image(
             image,
             -math.degrees(self.yaw),
@@ -212,18 +222,6 @@ class OCGridAdvertiser(Node):
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
-        # Ignore if pose is similar to previous detection
-        curr_detection_pose = np.array([self.north, self.east, self.down, \
-                               self.roll, self.pitch, self.yaw])
-        if np.linalg.norm(self.detection_pose-curr_detection_pose) < 0.1:
-            self.detection_pose = curr_detection_pose
-            # print("norm: ", np.linalg.norm(self.detection_pose-curr_detection_pose))
-            # print("curr pose: ", curr_detection_pose)
-            # print("prev pose: ", self.detection_pose)
-            return
-        else:
-            self.detection_pose = curr_detection_pose
-
         blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
         self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]

@@ -1,7 +1,7 @@
 #define MISSION_HEIGHT 10.0f
-#define FOLLOW_OFFSET 0.5f
-#define MAX_SPEED 0.6f
-#define FOLLOW_RADIUS 1.0f
+#define FOLLOW_OFFSET 1.0f
+#define MAX_SPEED 1.0f
+#define FOLLOW_RADIUS 4.0f
 
 #define MAP_SZ_M 60.0
 #define MAP_RESOLUTION 0.5 // 1px:m

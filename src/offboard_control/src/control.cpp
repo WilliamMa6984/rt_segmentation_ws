@@ -52,7 +52,7 @@ public:
 					// Change to Offboard mode (2 seconds after system start)
 					publish_offboard_control_mode();
 
-					publish_goto_setpoint(target_x+FOLLOW_OFFSET, target_y+FOLLOW_OFFSET, target_z);
+					publish_goto_setpoint(0, 0, target_z);
 					
 					this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
@@ -70,8 +70,14 @@ public:
 				publish_offboard_control_mode();
 
 				if (OffboardControl::magnitude(x-target_x, y-target_y, 0.0f) > FOLLOW_RADIUS) {
-					setpoint_x = target_x;
-					setpoint_y = target_y;
+					setpoint_x = target_x+FOLLOW_OFFSET;
+					setpoint_y = target_y+FOLLOW_OFFSET;
+
+					// If not at target z-height: go vertical first
+					if (abs(target_z-z) > 0.5) {
+						setpoint_x = x;
+						setpoint_y = y;
+					}
 
 					RCLCPP_INFO(this->get_logger(), "=========");
 					std::cout << "Out Target: " +
@@ -96,9 +102,13 @@ private:
 	
 	float x = 0.0f;
 	float y = 0.0f;
+	float z = 0.0f;
 
-	float target_x = 0.0f;
-	float target_y = 0.0f;
+	// Default to UGV spawn location
+	// SPAWN_X="-25.8"
+	// SPAWN_Y="16.1"
+	float target_x = 10.0f;
+	float target_y = -20.0f;
 	const float target_z = -MISSION_HEIGHT; // Constant
 
 	float setpoint_x = 0.0f;
@@ -107,6 +117,8 @@ private:
 
 	float ref_lat = 0.0f;
 	float ref_lon = 0.0f;
+
+	bool ugv_spawned = false;
 
 	rclcpp::TimerBase::SharedPtr timer_;
 
@@ -177,7 +189,11 @@ void OffboardControl::publish_goto_setpoint(float x, float y, float z)
 	msg.flag_control_heading = false;
 	msg.heading = 0.0f;
 	msg.flag_set_max_horizontal_speed = true;
-	msg.max_horizontal_speed = MAX_SPEED;
+	if (ugv_spawned==true) {
+		msg.max_horizontal_speed = MAX_SPEED;
+	} else {
+		msg.max_horizontal_speed = 5.0f;
+	}
 	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
 	goto_setpoint_publisher_->publish(msg);
 }
@@ -221,6 +237,7 @@ void OffboardControl::position_callback(const VehicleLocalPosition msg)
 {
 	x = msg.x;
 	y = msg.y;
+	z = msg.z;
 
 	if (msg.xy_global==true && msg.z_global==true) {
 		ref_lat = msg.ref_lat;

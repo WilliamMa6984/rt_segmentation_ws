@@ -18,6 +18,12 @@ gnome-terminal --tab --title='PredCam' -- bash -ic "ros2 run vision predictCam"
 gnome-terminal --tab --title='OCGrid' -- bash -ic "ros2 run vision ocgridAdvertiser"
 gnome-terminal --tab --title='Control' -- bash -ic "ros2 run offboard_control control"
 
+# SPAWN_X="-25.8"           # -x  UGV spawn X
+# SPAWN_Y="16.1"           # -y  UGV spawn Y
+# SPAWN_Z="33.3"            # -z  UGV spawn Z (terrain height at spawn)
+# gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEADLESS=1 PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="-22,11,32.8,0,0,0" make px4_sitl gz_x500_segment_cam_down"
+# Alignment issues; use default spawn location instead
+
 gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEADLESS=1 PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="5.05,3.24,32.31,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 # gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="5.05,3.24,32.31,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 # gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; PX4_GZ_WORLD=aruco make px4_sitl gz_x500_segment_cam_down"
