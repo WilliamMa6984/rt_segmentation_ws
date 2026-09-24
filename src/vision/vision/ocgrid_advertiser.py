@@ -98,6 +98,7 @@ class OCGridAdvertiser(Node):
 
         # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
         self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
+        self.map = cv2.cvtColor(self.map, cv2.COLOR_BGR2GRAY)
 
         self.get_logger().info('coord_advertiser node')
 
@@ -148,14 +149,14 @@ class OCGridAdvertiser(Node):
         if (np.isinf(self.down) or self.down==0 or np.max(image) == 0):
             return
 
-        # Ignore if pose is similar to previous detection
-        curr_pose = np.array([self.north, self.east, self.down, \
-                               self.roll, self.pitch, self.yaw])
-        if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
-            # self.detection_pose = curr_pose
-            return
-        else: # continue
-            self.detection_pose = curr_pose
+        # # Ignore if pose is similar to previous detection
+        # curr_pose = np.array([self.north, self.east, self.down, \
+        #                        self.roll, self.pitch, self.yaw])
+        # if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
+        #     # self.detection_pose = curr_pose
+        #     return
+        # else: # continue
+        #     self.detection_pose = curr_pose
         
         # Process (rotate + translate) moss seg. image
         self.detection_map_img, self.detection_map_mask = self.rotate_image(
@@ -222,7 +223,7 @@ class OCGridAdvertiser(Node):
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
-        blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
+        blended = self.detection_map_img*0.1 + self.detection_map_img_historic*0.9
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
         self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 

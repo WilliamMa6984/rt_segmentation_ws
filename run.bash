@@ -33,3 +33,7 @@ gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEA
 # Husarion
 # source ~/Software/qut_uas_ws/install/setup.bash && ros2 launch uas_gazebo_sim rescue_randy_spawner_gz.launch.py world_name:=aspa135_m3
 # source_ugv_sim && ros2 launch husarion_ugv_gazebo simulate_robot.launch.py x:=1.0 y:=1.0 z:=34
+
+gnome-terminal --tab --title='UGV' -- bash -ic "sleep 55; source_ugv_sim; source ~/Software/qut_uas_ws/src/uas_gazebo_sim/launch/load_ugv_mission.sh"
+
+gnome-terminal --tab --title='Bag' -- bash -ic "sleep 55; source_ugv_sim; cd ~/Software/ROS_bags/horizontal_missions; source ~/Software/qut_uas_ws/install/local_setup.bash; ros2 bag record ugv/global_position"

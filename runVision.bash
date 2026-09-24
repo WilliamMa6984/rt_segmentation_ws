@@ -13,7 +13,7 @@ source install/local_setup.bash
 
 # gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEADLESS=1 PX4_GZ_WORLD=robbos PX4_GZ_MODEL_POSE="-9.0,-10.0,32.36,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 
-# gnome-terminal --tab --title='PredCam' -- bash -ic "ros2 run vision predictCam"
+gnome-terminal --tab --title='PredCam' -- bash -ic "ros2 run vision predictCam"
 # ros2 run vision predictCam
 ros2 run vision ocgridAdvertiser
 # ros2 run vision pycam
