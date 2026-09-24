@@ -26,17 +26,9 @@ DETECTION_SZ = int(MAP_SZ_M / MAP_RESOLUTION)
 # WGS-84 Earth radius (metres)
 EARTH_RADIUS = 6371000.0
 
-# Bottom left
-# REF_LAT = -66.28249195481575
-# REF_LON = 110.53827323985684
-# lat: -66.28249195481575
-# lon: 110.53827323985684
-# Middle
-REF_LAT = -66.28224326862865
-REF_LON = 110.53892436645867
-# lat: -66.28224326862865
-# lon: 110.53892436645867
-
+# PX4 origin/spawn in lon/lat
+REF_LAT = -66.28223056
+REF_LON = 110.53892500
 
 class OCGridAdvertiser(Node):
     def __init__(self):
@@ -98,7 +90,7 @@ class OCGridAdvertiser(Node):
 
         # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
         self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
-        self.map = cv2.cvtColor(self.map, cv2.COLOR_BGR2GRAY)
+        # self.map = cv2.cvtColor(self.map, cv2.COLOR_BGR2GRAY)
 
         self.get_logger().info('coord_advertiser node')
 
@@ -149,14 +141,14 @@ class OCGridAdvertiser(Node):
         if (np.isinf(self.down) or self.down==0 or np.max(image) == 0):
             return
 
-        # # Ignore if pose is similar to previous detection
-        # curr_pose = np.array([self.north, self.east, self.down, \
-        #                        self.roll, self.pitch, self.yaw])
-        # if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
-        #     # self.detection_pose = curr_pose
-        #     return
-        # else: # continue
-        #     self.detection_pose = curr_pose
+        # Ignore if pose is similar to previous detection
+        curr_pose = np.array([self.north, self.east, self.down, \
+                               self.roll, self.pitch, self.yaw])
+        if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
+            # self.detection_pose = curr_pose
+            return
+        else: # continue
+            self.detection_pose = curr_pose
         
         # Process (rotate + translate) moss seg. image
         self.detection_map_img, self.detection_map_mask = self.rotate_image(
@@ -172,7 +164,7 @@ class OCGridAdvertiser(Node):
         image_height, image_width = image.shape[:2]
         image_center = (image_width / 2.0, image_height / 2.0)
 
-        fov = 1.5
+        fov = 1.45
         focal_length = (image_width * 0.5) / math.tan(fov * 0.5)
         theta = math.atan2(image_width, focal_length)
         projected_width = dist_from_gnd * math.tan(theta)
@@ -225,7 +217,7 @@ class OCGridAdvertiser(Node):
     def publish_occupancy_grid(self):
         blended = self.detection_map_img*0.1 + self.detection_map_img_historic*0.9
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
-        self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
+        # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
         # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
         occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
@@ -235,13 +227,12 @@ class OCGridAdvertiser(Node):
         # plt.pause(0.05)
 
         # Verify against precompute map
-        # detection_map_img_ = cv2.cvtColor(self.detection_map_img, cv2.COLOR_GRAY2BGR)
+        # detection_map_img_ = cv2.cvtColor(self.detection_map_img_historic, cv2.COLOR_GRAY2BGR)
         # detection_map_img_[:, :, 0] = 0  # Blue = 0
         # detection_map_img_[:, :, 2] = 0  # Red = 0
 
         # blended = cv2.addWeighted(self.map, 0.2, detection_map_img_, 0.8, 0)
         # plt.imshow(blended)
-        # plt.imshow(self.detection_map_img, cmap='gray')
         # plt.pause(0.05)
 
         self.get_logger().info(
