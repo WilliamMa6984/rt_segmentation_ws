@@ -26,7 +26,7 @@ DETECTION_SZ = int(MAP_SZ_M / MAP_RESOLUTION)
 # WGS-84 Earth radius (metres)
 EARTH_RADIUS = 6371000.0
 
-# PX4 origin/spawn in lon/lat
+# Gz origin in lon/lat
 REF_LAT = -66.28223056
 REF_LON = 110.53892500
 
@@ -85,6 +85,7 @@ class OCGridAdvertiser(Node):
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
         self.detection_pose = np.zeros((6,1))
+        self.detection_pose_countup = 0
         self.bridge = CvBridge()
         self.timer = self.create_timer(0.2, self.publish_occupancy_grid)
 
@@ -141,14 +142,14 @@ class OCGridAdvertiser(Node):
         if (np.isinf(self.down) or self.down==0 or np.max(image) == 0):
             return
 
-        # Ignore if pose is similar to previous detection
-        curr_pose = np.array([self.north, self.east, self.down, \
-                               self.roll, self.pitch, self.yaw])
-        if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
-            # self.detection_pose = curr_pose
-            return
-        else: # continue
-            self.detection_pose = curr_pose
+        # # Ignore if pose is similar to previous detection
+        # curr_pose = np.array([self.north, self.east, self.down, \
+        #                        self.roll, self.pitch, self.yaw])
+        # if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
+        #     # self.detection_pose = curr_pose
+        #     return
+        # else: # continue
+        #     self.detection_pose = curr_pose
         
         # Process (rotate + translate) moss seg. image
         self.detection_map_img, self.detection_map_mask = self.rotate_image(
@@ -215,18 +216,23 @@ class OCGridAdvertiser(Node):
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
+        # Weighted sum of historic and current image
         blended = self.detection_map_img*0.1 + self.detection_map_img_historic*0.9
-        self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
-        # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
-        # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
-        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-        self.occupancy_grid_publisher.publish(occ_img_msg)
+        if (not self.is_similar(blended[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+            # Set image to map
+            self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
+            # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
+
+            # Publish message
+            # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
+            occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            self.occupancy_grid_publisher.publish(occ_img_msg)
 
         # plt.imshow(self.detection_map_mask_historic)
         # plt.pause(0.05)
 
-        # Verify against precompute map
+        # # Verify against precompute map
         # detection_map_img_ = cv2.cvtColor(self.detection_map_img_historic, cv2.COLOR_GRAY2BGR)
         # detection_map_img_[:, :, 0] = 0  # Blue = 0
         # detection_map_img_[:, :, 2] = 0  # Red = 0
@@ -242,6 +248,22 @@ class OCGridAdvertiser(Node):
             f'Max tilts (RP): {self.maxRoll} {self.maxPitch}'
         )
 
+# Source - https://stackoverflow.com/a/70112625
+# Posted by B-L
+# Retrieved 2026-09-24, License - CC BY-SA 4.0
+    def is_similar(self, img1, img2):
+        #--- take the absolute difference of the images ---
+        res = cv2.absdiff(img1.astype(np.uint8),img2.astype(np.uint8))
+
+        #--- convert the result to integer type ---
+        res = res.astype(np.uint8)
+
+        #--- find percentage difference based on number of pixels that are not zero ---
+        percentage = (np.count_nonzero(res))/ res.size
+
+        print(percentage)
+        
+        return percentage < 0.2
 
 def main(args=None):
     rclpy.init(args=args)

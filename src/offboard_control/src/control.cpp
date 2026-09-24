@@ -107,8 +107,8 @@ private:
 	// Default to UGV spawn location
 	// SPAWN_X="-25.8"
 	// SPAWN_Y="16.1"
-	float target_x = 10.0f;
-	float target_y = -20.0f;
+	float target_x = INIT_TARGET_X;
+	float target_y = INIT_TARGET_Y;
 	const float target_z = -MISSION_HEIGHT; // Constant
 
 	float setpoint_x = 0.0f;
