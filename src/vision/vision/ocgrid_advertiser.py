@@ -90,13 +90,22 @@ class OCGridAdvertiser(Node):
         self.timer = self.create_timer(0.2, self.publish_occupancy_grid)
 
         # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
-        self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
+        # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
+        mask_map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask_10malt.jpg'))
+        mask_map = cv2.cvtColor(mask_map, cv2.COLOR_BGR2GRAY)
         # self.map = cv2.cvtColor(self.map, cv2.COLOR_BGR2GRAY)
+
+        if mask_map is None:
+            self.get_logger().error("Image failed to load! Check the file path.")
+
+        kernel = np.ones((2, 2), np.uint8)
+        dilated = cv2.dilate(mask_map, kernel, iterations=1)
+        self.detection_map_img_historic = dilated
 
         self.get_logger().info('coord_advertiser node')
 
-        if self.map is None:
-            self.get_logger().error("Image failed to load! Check the file path.")
+        # if self.map is None:
+        #     self.get_logger().error("Image failed to load! Check the file path.")
 
 # @brief Subscribe vehicle local position
 # @param 
@@ -129,7 +138,7 @@ class OCGridAdvertiser(Node):
         print("============")
 
         # Ignore predictor images if the robot is tilted too much
-        if abs(self.pitch) > 0.065 or abs(self.roll) > 0.065:
+        if abs(self.pitch) > 0.01 or abs(self.roll) > 0.01:
             return
 
         try:
@@ -216,20 +225,23 @@ class OCGridAdvertiser(Node):
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
-        # Weighted sum of historic and current image
-        kernel = np.ones((2, 2), np.uint8)
-        dilated = cv2.dilate(self.detection_map_img, kernel, iterations=1)
-        blended = dilated*0.1 + self.detection_map_img_historic*0.9
+        # # Weighted sum of historic and current image
+        # kernel = np.ones((2, 2), np.uint8)
+        # dilated = cv2.dilate(self.detection_map_img, kernel, iterations=1)
+        # blended = dilated*0.1 + self.detection_map_img_historic*0.9
 
-        if (not self.is_similar(blended[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
-            # Set image to map
-            self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
-            # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
+        # if (not self.is_similar(blended[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+        #     # Set image to map
+        #     self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
+        #     # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
-            # Publish message
-            # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
-            occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-            self.occupancy_grid_publisher.publish(occ_img_msg)
+        #     # Publish message
+        #     # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
+        #     occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+        #     self.occupancy_grid_publisher.publish(occ_img_msg)
+
+        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+        self.occupancy_grid_publisher.publish(occ_img_msg)
 
         # plt.imshow(self.detection_map_mask_historic)
         # plt.pause(0.05)

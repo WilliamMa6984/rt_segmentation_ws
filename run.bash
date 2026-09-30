@@ -24,7 +24,7 @@ gnome-terminal --tab --title='Control' -- bash -ic "ros2 run offboard_control co
 # gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEADLESS=1 PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="-22,11,32.8,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 # Alignment issues; use default spawn location instead
 
-gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEADLESS=1 PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="0,0,32.55,0,0,0" make px4_sitl gz_x500_segment_cam_down"
+gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEADLESS=1 PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="0,0,32.5,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 # gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; PX4_GZ_WORLD=aspa135_m3 PX4_GZ_MODEL_POSE="5.05,3.24,32.31,0,0,0" make px4_sitl gz_x500_segment_cam_down"
 # gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; PX4_GZ_WORLD=aruco make px4_sitl gz_x500_segment_cam_down"
 
@@ -34,6 +34,6 @@ gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEA
 # source ~/Software/qut_uas_ws/install/setup.bash && ros2 launch uas_gazebo_sim rescue_randy_spawner_gz.launch.py world_name:=aspa135_m3
 # source_ugv_sim && ros2 launch husarion_ugv_gazebo simulate_robot.launch.py x:=1.0 y:=1.0 z:=34
 
-gnome-terminal --tab --title='UGV' -- bash -ic "sleep 55; source_ugv_sim; source ~/Software/qut_uas_ws/src/uas_gazebo_sim/launch/load_ugv_mission.sh"
+gnome-terminal --tab --title='UGV' -- bash -ic "sleep 60; source_ugv_sim; source ~/Software/qut_uas_ws/src/uas_gazebo_sim/launch/load_ugv_mission.sh"
 
-gnome-terminal --tab --title='Bag' -- bash -ic "sleep 55; source_ugv_sim; cd ~/Software/ROS_bags/vertical_missions; source ~/Software/qut_uas_ws/install/local_setup.bash; ros2 bag record ugv/global_position"
+gnome-terminal --tab --title='Bag' -- bash -ic "sleep 60; source_ugv_sim; cd ~/ROS_bags/v2/horizontal_precompute; source ~/Software/qut_uas_ws/install/local_setup.bash; ros2 bag record ugv/global_position"
