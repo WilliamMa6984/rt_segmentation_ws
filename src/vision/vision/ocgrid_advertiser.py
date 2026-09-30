@@ -217,7 +217,9 @@ class OCGridAdvertiser(Node):
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
         # Weighted sum of historic and current image
-        blended = self.detection_map_img*0.1 + self.detection_map_img_historic*0.9
+        kernel = np.ones((2, 2), np.uint8)
+        dilated = cv2.dilate(self.detection_map_img, kernel, iterations=1)
+        blended = dilated*0.1 + self.detection_map_img_historic*0.9
 
         if (not self.is_similar(blended[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
             # Set image to map
@@ -263,7 +265,7 @@ class OCGridAdvertiser(Node):
 
         print(percentage)
         
-        return percentage < 0.2
+        return percentage < 0.23
 
 def main(args=None):
     rclpy.init(args=args)
