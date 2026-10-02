@@ -84,6 +84,9 @@ class OCGridAdvertiser(Node):
         self.detection_map_mask_historic = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
+        self.detection_map_img_topublish = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        )
         self.detection_pose = np.zeros((6,1))
         self.detection_pose_countup = 0
         self.bridge = CvBridge()
@@ -91,13 +94,13 @@ class OCGridAdvertiser(Node):
 
         # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
         self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
-        mask_map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask_10malt.jpg'))
+        # mask_map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask_10malt.jpg'))
         # mask_map = cv2.cvtColor(mask_map, cv2.COLOR_BGR2GRAY)
         self.map[:, :, 2] = 0  # Blue = 0
         self.map[:, :, 1] = 0  # Green = 0
 
-        if mask_map is None:
-            self.get_logger().error("Image failed to load! Check the file path.")
+        # if mask_map is None:
+        #     self.get_logger().error("Image failed to load! Check the file path.")
 
         # kernel = np.ones((2, 2), np.uint8)
         # dilated = cv2.dilate(mask_map, kernel, iterations=1)
@@ -235,32 +238,33 @@ class OCGridAdvertiser(Node):
         # Weighted sum of historic and current image
         # kernel = np.ones((2, 2), np.uint8)
         # dilated = cv2.dilate(self.detection_map_img, kernel, iterations=1)
-        blended = self.detection_map_img*0.1 + self.detection_map_img_historic*0.9
+        blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
 
-        # if (not self.is_similar(blended[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
         # Set image to map
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
         # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
-        # Publish message
-        # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
-        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-        self.occupancy_grid_publisher.publish(occ_img_msg)
+        # Publish message if too different from previous
+        if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+            # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
+            self.detection_map_img_topublish = self.detection_map_img_historic.copy()
+            occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            self.occupancy_grid_publisher.publish(occ_img_msg)
 
-        # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-        # self.occupancy_grid_publisher.publish(occ_img_msg)
+            # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            # self.occupancy_grid_publisher.publish(occ_img_msg)
 
-        # plt.imshow(self.detection_map_mask_historic)
-        # plt.pause(0.05)
+            # plt.imshow(self.detection_map_mask_historic)
+            # plt.pause(0.05)
 
-        # Verify against precompute map
-        detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
-        detection_map_img_[:, :, 0] = 0  # Blue = 0
-        detection_map_img_[:, :, 2] = 0  # Red = 0
+            # Verify against precompute map
+            detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
+            detection_map_img_[:, :, 0] = 0  # Blue = 0
+            detection_map_img_[:, :, 2] = 0  # Red = 0
 
-        blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
-        plt.imshow(blended)
-        plt.pause(0.05)
+            blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
+            plt.imshow(blended)
+            plt.pause(0.05)
 
         self.get_logger().info(
             f'Pos (NED): {self.north} {self.east} {self.down}\n'
@@ -284,7 +288,7 @@ class OCGridAdvertiser(Node):
 
         print(percentage)
         
-        return percentage < 0.23
+        return percentage < 0.3
 
 def main(args=None):
     rclpy.init(args=args)
