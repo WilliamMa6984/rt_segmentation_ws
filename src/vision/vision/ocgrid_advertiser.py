@@ -87,8 +87,8 @@ class OCGridAdvertiser(Node):
         self.detection_map_prob_mask = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
-        self.visited_map = np.zeros(
-            (DETECTION_SZ, DETECTION_SZ), dtype=np.float64
+        self.detection_map_mask_historic = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
         self.detection_map_img_topublish = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
@@ -204,7 +204,7 @@ class OCGridAdvertiser(Node):
 
         # Normalize the distance to a range of 0 to 1
             # distance(0,0) == max distance from centre
-        prob_mask = np.abs(distance - distance[0,0])/distance[0,0]
+        prob_mask = np.abs(distance - distance[0,0])/distance[0,0] * DETECT_BIAS
         # ======= Mask =======
         mask = np.ones((image_height, image_width), dtype=np.uint8) * 255
 
@@ -267,48 +267,41 @@ class OCGridAdvertiser(Node):
         # Weighted sum of historic and current image
         # kernel = np.ones((2, 2), np.uint8)
         # dilated = cv2.dilate(self.detection_map_img, kernel, iterations=1)
-        weight = self.detection_map_prob_mask*DETECT_BIAS
-        blended =   self.detection_map_img*weight + \
-                    self.detection_map_img_historic*(1-weight)
+        blended =   self.detection_map_img*self.detection_map_prob_mask + \
+                    self.detection_map_img_historic*(1-self.detection_map_prob_mask)
 
-        detect_mask = self.detection_map_prob_mask>0
-        
-        # Get 
-        update_visited_map = np.maximum(self.visited_map[detect_mask], self.detection_map_prob_mask[detect_mask].astype(np.float16))
+        # Set image to map
+        self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]
+        # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
-        visit_changed = update_visited_map > self.visited_map[detect_mask]
-        
-        update_mask = np.zeros_like(detect_mask)
-        update_mask[detect_mask] = visit_changed
+        # Publish message if too different from previous
+        if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+            # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
+            self.detection_map_img_topublish = self.detection_map_img_historic.copy()
+            occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            self.occupancy_grid_publisher.publish(occ_img_msg)
 
-        self.detection_map_img_historic[update_mask] = blended[update_mask]
-        if np.any(detect_mask):
-            # Publish message if too different from previous
-            if (not self.is_similar(self.detection_map_img_topublish[detect_mask], self.detection_map_img_historic[detect_mask])):
-                # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
-                self.detection_map_img_topublish = self.detection_map_img_historic.copy()
-                occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-                self.occupancy_grid_publisher.publish(occ_img_msg)
+            # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            # self.occupancy_grid_publisher.publish(occ_img_msg)
 
-                # Verify against precompute map
-                detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
-                detection_map_img_[:, :, 0] = 0  # Blue = 0
-                detection_map_img_[:, :, 2] = 0  # Red = 0
+            # plt.imshow(self.detection_map_mask_historic)
+            # plt.pause(0.05)
 
-                blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
-                plt.imshow(blended)
-                plt.pause(0.05)
-            else:
-                # Similar detects (detections settled), set area as complete
-                self.visited_map[detect_mask] = update_visited_map
-            
+            # Verify against precompute map
+            detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
+            detection_map_img_[:, :, 0] = 0  # Blue = 0
+            detection_map_img_[:, :, 2] = 0  # Red = 0
 
-            self.get_logger().info(
-                f'Pos (NED): {self.north} {self.east} {self.down}\n'
-                f'RPY: {self.roll} {self.pitch} {self.yaw}\n'
-                f'Ref north/east: {self.origin_north} {self.origin_east}\n'
-                f'Max tilts (RP): {self.maxRoll} {self.maxPitch}'
-            )
+            blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
+            plt.imshow(blended)
+            plt.pause(0.05)
+
+        self.get_logger().info(
+            f'Pos (NED): {self.north} {self.east} {self.down}\n'
+            f'RPY: {self.roll} {self.pitch} {self.yaw}\n'
+            f'Ref north/east: {self.origin_north} {self.origin_east}\n'
+            f'Max tilts (RP): {self.maxRoll} {self.maxPitch}'
+        )
 
 # Source - https://stackoverflow.com/a/70112625
 # Posted by B-L
