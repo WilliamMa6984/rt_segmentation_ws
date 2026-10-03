@@ -31,7 +31,7 @@ REF_LAT = -66.28223056
 REF_LON = 110.53892500
 
 PUB_TIME = 0.2
-DETECT_BIAS = 0.2
+DETECT_BIAS = 0.5
 
 class OCGridAdvertiser(Node):
     def __init__(self):
@@ -191,7 +191,7 @@ class OCGridAdvertiser(Node):
 
         # ======= Probability mask =======
         center_x, center_y = image_width // 2, image_height // 2
-        radius = 50
+        radius = image_width / 2.5
         # Create a coordinate grid of the image
         y, x = np.ogrid[:image_height, :image_width]
         # Calculate the distance of every pixel from the center
