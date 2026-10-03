@@ -30,6 +30,9 @@ EARTH_RADIUS = 6371000.0
 REF_LAT = -66.28223056
 REF_LON = 110.53892500
 
+PUB_TIME = 0.2
+DETECT_BIAS = 0.2
+
 class OCGridAdvertiser(Node):
     def __init__(self):
         super().__init__('ocgrid_advertiser')
@@ -81,16 +84,19 @@ class OCGridAdvertiser(Node):
         self.detection_map_mask = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
+        self.detection_map_prob_mask = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        )
         self.detection_map_mask_historic = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
         self.detection_map_img_topublish = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
-        self.detection_pose = np.zeros((6,1))
+        self.detection_pose = np.zeros((3,1))
         self.detection_pose_countup = 0
         self.bridge = CvBridge()
-        self.timer = self.create_timer(0.2, self.publish_occupancy_grid)
+        self.timer = self.create_timer(PUB_TIME, self.publish_occupancy_grid)
 
         # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
         self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
@@ -146,6 +152,7 @@ class OCGridAdvertiser(Node):
             self.detection_map_mask = np.zeros(
                 (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
             )
+            print("Tilt angle too steep, ignore")
             return
 
         try:
@@ -159,19 +166,11 @@ class OCGridAdvertiser(Node):
             self.detection_map_mask = np.zeros(
                 (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
             )
+            print("Empty or inf dist, ignore")
             return
 
-        # # Ignore if pose is similar to previous detection
-        # curr_pose = np.array([self.north, self.east, self.down, \
-        #                        self.roll, self.pitch, self.yaw])
-        # if np.linalg.norm(self.detection_pose-curr_pose) < 0.1: # too close
-        #     # self.detection_pose = curr_pose
-        #     return
-        # else: # continue
-        #     self.detection_pose = curr_pose
-        
         # Process (rotate + translate) moss seg. image
-        self.detection_map_img, self.detection_map_mask = self.rotate_image(
+        self.detection_map_img, self.detection_map_mask, self.detection_map_prob_mask = self.rotate_image(
             image,
             -math.degrees(self.yaw),
             self.down,
@@ -190,8 +189,26 @@ class OCGridAdvertiser(Node):
         projected_width = dist_from_gnd * math.tan(theta)
         scale_factor = projected_width / image_width / MAP_RESOLUTION
 
+        # ======= Probability mask =======
+        center_x, center_y = image_width // 2, image_height // 2
+        radius = 50
+        # Create a coordinate grid of the image
+        y, x = np.ogrid[:image_height, :image_width]
+        # Calculate the distance of every pixel from the center
+        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+
+        # limit distance to radius
+        distance[distance > radius] = radius
+        # adjust distribution
+        distance = distance**3
+
+        # Normalize the distance to a range of 0 to 1
+            # distance(0,0) == max distance from centre
+        prob_mask = np.abs(distance - distance[0,0])/distance[0,0] * DETECT_BIAS
+        # ======= Mask =======
         mask = np.ones((image_height, image_width), dtype=np.uint8) * 255
 
+        # ======= Transform =======
         # Rotate and scale image based on yaw and distance from ground
         rotation_matrix = cv2.getRotationMatrix2D(
             image_center, angle, scale_factor
@@ -205,6 +222,12 @@ class OCGridAdvertiser(Node):
         # Same with mask
         mask = cv2.warpAffine(
             mask,
+            rotation_matrix,
+            (image_width, image_height),
+            flags=cv2.INTER_LINEAR,
+        )
+        prob_mask = cv2.warpAffine(
+            prob_mask,
             rotation_matrix,
             (image_width, image_height),
             flags=cv2.INTER_LINEAR,
@@ -230,15 +253,22 @@ class OCGridAdvertiser(Node):
             (DETECTION_SZ, DETECTION_SZ),
             flags=cv2.INTER_LINEAR,
         ) > 0
+        prob_mask = cv2.warpAffine(
+            prob_mask,
+            translation_matrix,
+            (DETECTION_SZ, DETECTION_SZ),
+            flags=cv2.INTER_LINEAR,
+        )
 
-        return rotated_image, mask
+        return rotated_image, mask, prob_mask
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
         # Weighted sum of historic and current image
         # kernel = np.ones((2, 2), np.uint8)
         # dilated = cv2.dilate(self.detection_map_img, kernel, iterations=1)
-        blended = self.detection_map_img*0.2 + self.detection_map_img_historic*0.8
+        blended =   self.detection_map_img*self.detection_map_prob_mask + \
+                    self.detection_map_img_historic*(1-self.detection_map_prob_mask)
 
         # Set image to map
         self.detection_map_img_historic[self.detection_map_mask] = blended[self.detection_map_mask]

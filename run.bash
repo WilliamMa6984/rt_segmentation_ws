@@ -36,4 +36,4 @@ gnome-terminal --tab --title='GZ' -- bash -ic "source_ugv_sim; cd $PX4_PATH; HEA
 
 gnome-terminal --tab --title='UGV' -- bash -ic "sleep 60; source_ugv_sim; source ~/Software/qut_uas_ws/src/uas_gazebo_sim/launch/load_ugv_mission.sh"
 
-gnome-terminal --tab --title='Bag' -- bash -ic "sleep 60; source_ugv_sim; cd ~/ROS_bags/v2/vertical_null30model; source ~/Software/qut_uas_ws/install/local_setup.bash; ros2 bag record ugv/global_position"
+gnome-terminal --tab --title='Bag' -- bash -ic "sleep 60; source_ugv_sim; cd ~/ROS_bags/v3/vertical; source ~/Software/qut_uas_ws/install/local_setup.bash; ros2 bag record ugv/global_position"
