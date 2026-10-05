@@ -7,16 +7,17 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(px4_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(geographic_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(tf2_ros REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
 
+# Publisher
 add_executable(stream_gzcam src/stream_gzcam.cpp)
 ament_target_dependencies(stream_gzcam rclcpp sensor_msgs image_transport cv_bridge)
 target_include_directories(stream_gzcam PUBLIC
@@ -25,6 +26,17 @@ target_include_directories(stream_gzcam PUBLIC
 target_compile_features(stream_gzcam PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
 install(TARGETS stream_gzcam
+  DESTINATION lib/${PROJECT_NAME})
+
+# Subscriber
+add_executable(stream_gzcam_sub src/stream_gzcam_sub.cpp)
+ament_target_dependencies(stream_gzcam_sub rclcpp sensor_msgs image_transport cv_bridge OpenCV)
+target_include_directories(stream_gzcam_sub PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(stream_gzcam_sub PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+install(TARGETS stream_gzcam_sub
   DESTINATION lib/${PROJECT_NAME})
 
 

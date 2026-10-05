@@ -15,5 +15,5 @@ source install/local_setup.bash
 
 # gnome-terminal --tab --title='PredCam' -- bash -ic "ros2 run vision predictCam"
 # ros2 run vision predictCam
-ros2 run vision ocgridAdvertiser
-# ros2 run vision pycam
+# ros2 run vision ocgridAdvertiser
+ros2 run vision pycam
