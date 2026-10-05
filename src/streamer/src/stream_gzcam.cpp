@@ -24,8 +24,6 @@ public:
 
 		sub_ = this->create_subscription<sensor_msgs::msg::Image>("/camera/image", qos,
       		std::bind(&StreamGZCam::camera_callback, this, _1));
-
-		timer_ = this->create_wall_timer(200ms, std::bind(&StreamGZCam::timer_callback, this));
 	}
 
 	void initialize()
@@ -44,25 +42,20 @@ private:
 	cv::Mat img_;
 	 
 	rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr sub_;
+	
 	image_transport::Publisher pub_;
 
 	sensor_msgs::msg::Image msg_;
 
-	void camera_callback(sensor_msgs::msg::Image msg);
-	void timer_callback();
+	void camera_callback(sensor_msgs::msg::Image::ConstSharedPtr msg);
 };
-
-void StreamGZCam::timer_callback() {
-	pub_.publish(msg_);
-}
 
 /**
  * @brief Subscribe to prediction image
  * @param 
  */
-void StreamGZCam::camera_callback(const sensor_msgs::msg::Image msg) {
-	msg_ = msg;
-
+void StreamGZCam::camera_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg) {
+	pub_.publish(*msg);
 }
 
 int main(int argc, char *argv[])

@@ -65,7 +65,7 @@ void StreamGZCamSub::stream_callback(const sensor_msgs::msg::Image::ConstSharedP
 		    msg->step
 		);
 		
-        	auto cv_ptr = cv_bridge::toCvCopy(msg, "bgr8");
+        	auto cv_ptr = cv_bridge::toCvShare(msg, "bgr8");
         	
 		cv::imshow("view", cv_ptr->image);
 		cv::waitKey(1);
