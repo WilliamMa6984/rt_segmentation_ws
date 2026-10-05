@@ -23,6 +23,7 @@ public:
 		cv::namedWindow("view");
 		cv::startWindowThread();
 
+		img_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/camera/decomp/image", 10);
 		RCLCPP_INFO(this->get_logger(), "stream_gzcam_sub node");
 	}
 
@@ -42,6 +43,7 @@ private:
 	cv::Mat img_;
 	 
 	image_transport::Subscriber sub_;
+	rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr img_pub_;
 	std::unique_ptr<image_transport::ImageTransport> it_;
 
 	sensor_msgs::msg::Image msg_;
@@ -55,7 +57,7 @@ private:
  * @param 
  */
 void StreamGZCamSub::stream_callback(const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
-	try {
+	/*try {
 		RCLCPP_INFO_ONCE(
 		    this->get_logger(),
 		    "Received image: %ux%u, encoding=%s, step=%u",
@@ -72,7 +74,8 @@ void StreamGZCamSub::stream_callback(const sensor_msgs::msg::Image::ConstSharedP
 	} catch (const cv_bridge::Exception & e) {
 		auto logger = rclcpp::get_logger("stream_gzcam_sub");
 		RCLCPP_ERROR(logger, "Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
-	}
+	}*/
+	img_pub_->publish(*msg);
 }
 
 int main(int argc, char *argv[])

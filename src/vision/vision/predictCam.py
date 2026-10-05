@@ -49,7 +49,7 @@ class ImagePredictorSubscriber(Node):
     )
     self.subscription = self.create_subscription(
       Image, 
-      '/camera/image', 
+      '/camera/decomp/image', 
       self.listener_callback, 
       10)
     self.subscription # prevent unused variable warning
