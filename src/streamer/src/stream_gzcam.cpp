@@ -1,6 +1,5 @@
 #include <chrono>
 #include <rclcpp/rclcpp.hpp>
-#include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <cmath>
 
@@ -18,20 +17,25 @@ using std::placeholders::_1;
 class StreamGZCam : public rclcpp::Node
 {
 public:
-	StreamGZCam() : Node("coord_advertiser")
+	StreamGZCam() : Node("stream_gzcam")
 	{
-		rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("coord_advertiser");
-		image_transport::ImageTransport it(node);
-
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 
 		sub_ = this->create_subscription<sensor_msgs::msg::Image>("/camera/image", qos,
       		std::bind(&StreamGZCam::camera_callback, this, _1));
 
+		timer_ = this->create_wall_timer(200ms, std::bind(&StreamGZCam::timer_callback, this));
+	}
+
+	void initialize()
+	{
+		rclcpp::Node::SharedPtr node = shared_from_this();
+		image_transport::ImageTransport it(node);
+
 		pub_ = it.advertise("/camera/stream/image", 1);
 
-		RCLCPP_INFO(this->get_logger(), "coord_advertiser node");
+		RCLCPP_INFO(this->get_logger(), "stream_gzcam node");
 	}
 
 private:
@@ -48,13 +52,16 @@ private:
 	void timer_callback();
 };
 
+void StreamGZCam::timer_callback() {
+	pub_.publish(msg_);
+}
+
 /**
  * @brief Subscribe to prediction image
  * @param 
  */
 void StreamGZCam::camera_callback(const sensor_msgs::msg::Image msg) {
 	msg_ = msg;
-	pub_.publish(msg_);
 
 }
 
@@ -63,7 +70,9 @@ int main(int argc, char *argv[])
 	std::cout << "Starting debug_vect advertiser node..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<StreamGZCam>());
+	auto node = std::make_shared<StreamGZCam>();
+	node->initialize();
+	rclcpp::spin(node);
 
 	rclcpp::shutdown();
 	return 0;
