@@ -31,7 +31,7 @@ REF_LAT = -66.28223056
 REF_LON = 110.53892500
 
 PUB_TIME = 0.2
-DETECT_BIAS = 0.5
+DETECT_BIAS = 0.2
 
 class OCGridAdvertiser(Node):
     def __init__(self):
