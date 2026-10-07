@@ -55,7 +55,61 @@ private:
  * @param 
  */
 void StreamGZCam::camera_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg) {
-	pub_.publish(*msg);
+
+    try {
+        // Convert ROS Image -> OpenCV image.
+        // "passthrough" preserves the original encoding.
+        cv::Mat img = cv_bridge::toCvShare(msg, "rgb8")->image;
+
+		// Reshape to 572, 572
+		// Source - https://stackoverflow.com/a/61942452
+		// Posted by Juan Esteban Fonseca, modified by community. See post 'Timeline' for change history
+		// Retrieved 2026-05-17, License - CC BY-SA 4.0
+        // Crop a centered 960x960 region.
+        const int crop_w = 960;
+        const int crop_h = 960;
+
+        const int x = (img.cols - crop_w) / 2;
+        const int y = (img.rows - crop_h) / 2;
+
+        // Make sure the input image is large enough.
+        if (x < 0 || y < 0) {
+            RCLCPP_ERROR(
+                this->get_logger(),
+                "Image is too small for 960x960 crop: %dx%d",
+                img.cols, img.rows);
+            return;
+        }
+
+        cv::Mat cropped = img(cv::Rect(x, y, crop_w, crop_h));
+
+        // Resize 960x960 -> 572x572.
+        cv::Mat resized;
+        cv::resize(
+            cropped,
+            resized,
+            cv::Size(572, 572),
+            0.0,
+            0.0,
+            cv::INTER_LINEAR);
+
+        // Convert OpenCV image -> ROS Image.
+        auto output_msg =
+            cv_bridge::CvImage(
+                msg->header,
+                "rgb8",
+                resized).toImageMsg();
+
+        pub_.publish(*output_msg);
+
+    } catch (const cv_bridge::Exception &e) {
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "cv_bridge exception: %s",
+            e.what());
+    }
+
+    RCLCPP_INFO(this->get_logger(), "Published");
 }
 
 int main(int argc, char *argv[])

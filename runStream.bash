@@ -3,5 +3,7 @@ colcon build
 source ~/ros2_ws/install/setup.bash
 source install/local_setup.bash
 
-ros2 run streamer stream_gzcam_sub
+#export RMW_FASTRTPS_PUBLICATION_MODE=SYNCHRONOUS
+
+ros2 run streamer stream_gzcam
 
