@@ -92,7 +92,7 @@ class ImagePredictorSubscriber(Node):
 
   def listener_callback(self, data):
     img = self.br.imgmsg_to_cv2(data) # PIL image uses RGB, don't convert to BGR
-
+    """
     # Reshape to 572, 572
     # Source - https://stackoverflow.com/a/61942452
     # Posted by Juan Esteban Fonseca, modified by community. See post 'Timeline' for change history
@@ -106,10 +106,17 @@ class ImagePredictorSubscriber(Node):
 
     img = img[int(y):int(y+h), int(x):int(x+w)]
 
-    self.current_frame = cv2.resize(img, (572, 572)) 
+    self.current_frame = cv2.resize(img, (572, 572))
 
     mask = predict.predict_img(net=self.net,
                     full_img=self.current_frame,
+                    scale_factor=1.0,
+                    out_threshold=0.2,
+                    device=self.device)
+    """
+                    
+    mask = predict.predict_img(net=self.net,
+                    full_img=img,
                     scale_factor=1.0,
                     out_threshold=0.2,
                     device=self.device)

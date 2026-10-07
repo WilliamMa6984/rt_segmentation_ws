@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<dds xmlns="http://www.eprosima.com">
+    <profiles>
+        <transport_descriptors>
+            <transport_descriptor>
+                    <transport_id>client_tcp_transport</transport_id>
+                    <type>TCPv4</type>
+                    <!--
+                        Set listening port for the transport to 0.
+                        This automatically assigns a port.
+                    -->
+                    <listening_ports>
+                        <port>0</port>
+                    </listening_ports>
+            </transport_descriptor>
+        </transport_descriptors>
+        <participant profile_name="TCP_CLIENT" is_default_profile="true">
+            <rtps>
+                <builtin>
+                    <discovery_config>
+                        <discoveryProtocol>CLIENT</discoveryProtocol>
+                        <discoveryServersList>
+                            <!--
+                                Server locator specifying where it is listening
+                            -->
+                            <locator>
+                                <tcpv4>
+                                    <address>192.168.0.84</address>
+                                    <port>12345</port>
+                                    <physical_port>12345</physical_port>
+                                </tcpv4>
+                            </locator>
+                        </discoveryServersList>
+                    </discovery_config>
+                </builtin>
+                <useBuiltinTransports>false</useBuiltinTransports>
+                <userTransports>
+                    <transport_id>client_tcp_transport</transport_id>
+                </userTransports>
+            </rtps>
+        </participant>
+    </profiles>
+</dds>

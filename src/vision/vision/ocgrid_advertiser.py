@@ -275,7 +275,8 @@ class OCGridAdvertiser(Node):
         # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
         # Publish message if too different from previous
-        if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+        #if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+        if (True):
             # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
             self.detection_map_img_topublish = self.detection_map_img_historic.copy()
             occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")

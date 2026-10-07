@@ -34,6 +34,7 @@ public:
 			shared_from_this()
 		);
 
+		// image_transport::TransportHints hints = image_transport::TransportHints("compressed");
 		sub_ = it_->subscribe("/camera/stream/image", 1, std::bind(&StreamGZCamSub::stream_callback, this, _1));
 	}
 
@@ -57,7 +58,7 @@ private:
  * @param 
  */
 void StreamGZCamSub::stream_callback(const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
-	/*try {
+	try {
 		RCLCPP_INFO_ONCE(
 		    this->get_logger(),
 		    "Received image: %ux%u, encoding=%s, step=%u",
@@ -74,7 +75,7 @@ void StreamGZCamSub::stream_callback(const sensor_msgs::msg::Image::ConstSharedP
 	} catch (const cv_bridge::Exception & e) {
 		auto logger = rclcpp::get_logger("stream_gzcam_sub");
 		RCLCPP_ERROR(logger, "Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
-	}*/
+	}
 	img_pub_->publish(*msg);
 }
 
