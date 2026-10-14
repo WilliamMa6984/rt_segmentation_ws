@@ -20,7 +20,7 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 MAP_SZ_M = 60.0
-MAP_RESOLUTION = 0.5
+MAP_RESOLUTION = 0.25
 DETECTION_SZ = int(MAP_SZ_M / MAP_RESOLUTION)
 
 # WGS-84 Earth radius (metres)
@@ -30,8 +30,11 @@ EARTH_RADIUS = 6371000.0
 REF_LAT = -66.28223056
 REF_LON = 110.53892500
 
-PUB_TIME = 0.2
+PUB_TIME = 0.5
 DETECT_BIAS = 0.2
+
+CAM_W = 1280
+CAM_H = 960
 
 class OCGridAdvertiser(Node):
     def __init__(self):
@@ -52,7 +55,7 @@ class OCGridAdvertiser(Node):
             Image, '/moss_occ_grid', 10
         )
         self.prediction_subscriber = self.create_subscription(
-            Image, '/predictor/image_100', self.predictor_callback,
+            Image, '/predictor/image', self.predictor_callback,
             qos_profile_sensor_data
         )
         self.pose_subscriber = self.create_subscription(
@@ -87,12 +90,12 @@ class OCGridAdvertiser(Node):
         self.detection_map_prob_mask = np.zeros(
             (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         )
-        self.detection_map_mask_historic = np.zeros(
-            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
-        )
-        self.detection_map_img_topublish = np.zeros(
-            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
-        )
+        # self.detection_map_mask_historic = np.zeros(
+        #     (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        # )
+        # self.detection_map_img_topublish = np.zeros(
+        #     (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        # )
         self.detection_pose = np.zeros((3,1))
         self.detection_pose_countup = 0
         self.bridge = CvBridge()
@@ -100,6 +103,7 @@ class OCGridAdvertiser(Node):
 
         # self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map.png'))
         self.map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask.png'))
+        self.map = cv2.resize(self.map, (DETECTION_SZ, DETECTION_SZ))
         # mask_map = cv2.imread(os.path.join(get_package_share_directory('vision'), 'map_mask_10malt.jpg'))
         # mask_map = cv2.cvtColor(mask_map, cv2.COLOR_BGR2GRAY)
         self.map[:, :, 2] = 0  # Blue = 0
@@ -147,14 +151,6 @@ class OCGridAdvertiser(Node):
     def predictor_callback(self, msg):
         print("============")
 
-        # Ignore predictor images if the robot is tilted too much
-        if abs(self.pitch) > 0.06 or abs(self.roll) > 0.06:
-            self.detection_map_mask = np.zeros(
-                (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
-            )
-            print("Tilt angle too steep, ignore")
-            return
-
         try:
             image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
         except CvBridgeError:
@@ -170,21 +166,23 @@ class OCGridAdvertiser(Node):
             return
 
         # Process (rotate + translate) moss seg. image
-        self.detection_map_img, self.detection_map_mask, self.detection_map_prob_mask = self.rotate_image(
+        self.detection_map_img, self.detection_map_prob_mask = self.rotate_image(
             image,
             -math.degrees(self.yaw),
             self.down,
             self.east+self.origin_east,
             self.north+self.origin_north,
         )
+        self.detection_map_mask = self.detection_map_prob_mask>0
 
 # Rotate and translate the image based on robot pose and lidar distance
     def rotate_image(self, image, angle, dist_from_gnd, tx, ty):
         image_height, image_width = image.shape[:2]
         image_center = (image_width / 2.0, image_height / 2.0)
 
-        fov = 1.45
-        focal_length = (image_width * 0.5) / math.tan(fov * 0.5)
+        hfov = 1.74
+        vfov = 2*math.atan2(math.tan(hfov/2),(CAM_W/CAM_H))
+        focal_length = (image_width * 0.5) / math.tan(vfov * 0.5)
         theta = math.atan2(image_width, focal_length)
         projected_width = dist_from_gnd * math.tan(theta)
         scale_factor = projected_width / image_width / MAP_RESOLUTION
@@ -205,8 +203,6 @@ class OCGridAdvertiser(Node):
         # Normalize the distance to a range of 0 to 1
             # distance(0,0) == max distance from centre
         prob_mask = np.abs(distance - distance[0,0])/distance[0,0] * DETECT_BIAS
-        # ======= Mask =======
-        mask = np.ones((image_height, image_width), dtype=np.uint8) * 255
 
         # ======= Transform =======
         # Rotate and scale image based on yaw and distance from ground
@@ -220,12 +216,6 @@ class OCGridAdvertiser(Node):
             flags=cv2.INTER_LINEAR,
         )
         # Same with mask
-        mask = cv2.warpAffine(
-            mask,
-            rotation_matrix,
-            (image_width, image_height),
-            flags=cv2.INTER_LINEAR,
-        )
         prob_mask = cv2.warpAffine(
             prob_mask,
             rotation_matrix,
@@ -247,12 +237,6 @@ class OCGridAdvertiser(Node):
             flags=cv2.INTER_LINEAR,
         )
         # Same with mask
-        mask = cv2.warpAffine(
-            mask,
-            translation_matrix,
-            (DETECTION_SZ, DETECTION_SZ),
-            flags=cv2.INTER_LINEAR,
-        ) > 0
         prob_mask = cv2.warpAffine(
             prob_mask,
             translation_matrix,
@@ -260,7 +244,7 @@ class OCGridAdvertiser(Node):
             flags=cv2.INTER_LINEAR,
         )
 
-        return rotated_image, mask, prob_mask
+        return rotated_image, prob_mask
 
 # Publish the occupancy grid based on the transformed predictor image
     def publish_occupancy_grid(self):
@@ -275,26 +259,26 @@ class OCGridAdvertiser(Node):
         # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
         # Publish message if too different from previous
-        if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
-            # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
-            self.detection_map_img_topublish = self.detection_map_img_historic.copy()
-            occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-            self.occupancy_grid_publisher.publish(occ_img_msg)
+        # if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+        # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
+        # self.detection_map_img_topublish = self.detection_map_img_historic.copy()
+        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+        self.occupancy_grid_publisher.publish(occ_img_msg)
 
-            # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-            # self.occupancy_grid_publisher.publish(occ_img_msg)
+        # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+        # self.occupancy_grid_publisher.publish(occ_img_msg)
 
-            # plt.imshow(self.detection_map_mask_historic)
-            # plt.pause(0.05)
+        # plt.imshow(self.detection_map_mask_historic)
+        # plt.pause(0.05)
 
-            # Verify against precompute map
-            detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
-            detection_map_img_[:, :, 0] = 0  # Blue = 0
-            detection_map_img_[:, :, 2] = 0  # Red = 0
+        # Verify against precompute map
+        detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
+        detection_map_img_[:, :, 0] = 0  # Blue = 0
+        detection_map_img_[:, :, 2] = 0  # Red = 0
 
-            blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
-            plt.imshow(blended)
-            plt.pause(0.05)
+        blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
+        plt.imshow(blended)
+        plt.pause(0.05)
 
         self.get_logger().info(
             f'Pos (NED): {self.north} {self.east} {self.down}\n'

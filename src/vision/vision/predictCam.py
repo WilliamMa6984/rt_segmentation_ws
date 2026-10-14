@@ -67,7 +67,7 @@ class ImagePredictorSubscriber(Node):
     self.attitude_subscription # prevent unused variable warning
     # self.publisher_ = self.create_publisher(Bool, '/predictor/fps', 10)
     self.img_publisher_ = self.create_publisher(Image, '/predictor/image', 10)
-    self.img_100_publisher_ = self.create_publisher(Image, '/predictor/image_100', 10)
+    # self.img_100_publisher_ = self.create_publisher(Image, '/predictor/image_100', 10)
     self.robot_pose_publisher_ = self.create_publisher(Float32MultiArray, '/predictor/robot_pose', 10)
     self.br = CvBridge()
 
@@ -80,10 +80,10 @@ class ImagePredictorSubscriber(Node):
     print("predictCam node")
     
   def publisher_callback(self):
-    # if (self.img_msg is not None):
-    #   self.img_publisher_.publish(self.img_msg)
-    if (self.img_100_msg is not None):
-      self.img_100_publisher_.publish(self.img_100_msg)
+    if (self.img_msg is not None):
+      self.img_publisher_.publish(self.img_msg)
+    # if (self.img_100_msg is not None):
+    #   self.img_100_publisher_.publish(self.img_100_msg)
     if (self.pose_msg is not None):
       self.robot_pose_publisher_.publish(self.pose_msg)
       # np.set_printoptions(precision=2, suppress=True)
@@ -91,6 +91,14 @@ class ImagePredictorSubscriber(Node):
 
 
   def listener_callback(self, data):
+    # Ignore predictor images if the robot is tilted too much
+    if abs(self.pitch) > 0.06 or abs(self.roll) > 0.06:
+        return
+
+    self.pose_msg = Float32MultiArray()
+    self.pose_msg.data = [self.north, self.east, self.down,
+                         self.roll, self.pitch, self.yaw]
+    
     img = self.br.imgmsg_to_cv2(data) # PIL image uses RGB, don't convert to BGR
 
     # Reshape to 572, 572
@@ -115,15 +123,12 @@ class ImagePredictorSubscriber(Node):
                     device=self.device)
     
     mask = mask.astype(np.uint8)*100
-    self.pose_msg = Float32MultiArray()
-    self.pose_msg.data = [self.north, self.east, self.down,
-                         self.roll, self.pitch, self.yaw]
 
     # cv2.imshow("camera", mask)
     # cv2.waitKey(1)
 
-    # self.img_msg = self.br.cv2_to_imgmsg(mask, encoding="mono8")
-    self.img_100_msg = self.br.cv2_to_imgmsg(cv2.resize(mask, (100, 100)) , encoding="mono8")
+    self.img_msg = self.br.cv2_to_imgmsg(mask, encoding="mono8")
+    # self.img_100_msg = self.br.cv2_to_imgmsg(cv2.resize(mask, (100, 100)) , encoding="mono8")
     
     # msg = Bool()
     # msg.data = True
