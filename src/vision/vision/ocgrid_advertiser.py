@@ -93,9 +93,9 @@ class OCGridAdvertiser(Node):
         # self.detection_map_mask_historic = np.zeros(
         #     (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
         # )
-        # self.detection_map_img_topublish = np.zeros(
-        #     (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
-        # )
+        self.detection_map_img_topublish = np.zeros(
+            (DETECTION_SZ, DETECTION_SZ), dtype=np.uint8
+        )
         self.detection_pose = np.zeros((3,1))
         self.detection_pose_countup = 0
         self.bridge = CvBridge()
@@ -204,13 +204,19 @@ class OCGridAdvertiser(Node):
             # distance(0,0) == max distance from centre
         prob_mask = np.abs(distance - distance[0,0])/distance[0,0] * DETECT_BIAS
 
+        # ======= Denoise =========
+        kernel = np.ones((3, 3), np.uint8) # erode by 2px radius, open small openings, remove small noise
+        image_ = cv2.erode(image.astype(np.uint8), kernel, iterations=1)
+        kernel = np.ones((4, 4), np.uint8) # dilate by 1px radius
+        image_ = cv2.dilate(image_.astype(np.uint8), kernel, iterations=1)
+
         # ======= Transform =======
         # Rotate and scale image based on yaw and distance from ground
         rotation_matrix = cv2.getRotationMatrix2D(
             image_center, angle, scale_factor
         )
         rotated_image = cv2.warpAffine(
-            image,
+            image_,
             rotation_matrix,
             (image_width, image_height),
             flags=cv2.INTER_LINEAR,
@@ -259,26 +265,26 @@ class OCGridAdvertiser(Node):
         # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
         # Publish message if too different from previous
-        # if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+        if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
         # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
-        # self.detection_map_img_topublish = self.detection_map_img_historic.copy()
-        occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-        self.occupancy_grid_publisher.publish(occ_img_msg)
+            self.detection_map_img_topublish = self.detection_map_img_historic.copy()
+            occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            self.occupancy_grid_publisher.publish(occ_img_msg)
 
-        # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
-        # self.occupancy_grid_publisher.publish(occ_img_msg)
+            # occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
+            # self.occupancy_grid_publisher.publish(occ_img_msg)
 
-        # plt.imshow(self.detection_map_mask_historic)
-        # plt.pause(0.05)
+            # plt.imshow(self.detection_map_mask_historic)
+            # plt.pause(0.05)
 
-        # Verify against precompute map
-        detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
-        detection_map_img_[:, :, 0] = 0  # Blue = 0
-        detection_map_img_[:, :, 2] = 0  # Red = 0
+            # Verify against precompute map
+            detection_map_img_ = cv2.cvtColor((self.detection_map_img_historic>10).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)
+            detection_map_img_[:, :, 0] = 0  # Blue = 0
+            detection_map_img_[:, :, 2] = 0  # Red = 0
 
-        blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
-        plt.imshow(blended)
-        plt.pause(0.05)
+            blended = cv2.addWeighted(self.map, 0.5, (detection_map_img_).astype(np.uint8), 0.5, 0)
+            plt.imshow(blended)
+            plt.pause(0.05)
 
         self.get_logger().info(
             f'Pos (NED): {self.north} {self.east} {self.down}\n'
