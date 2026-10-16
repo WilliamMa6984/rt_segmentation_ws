@@ -14,6 +14,7 @@ import rclpy.qos
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32MultiArray
 from px4_msgs.msg import VehicleLocalPosition
+from geographic_msgs.msg import GeoPoint
 
 import matplotlib.pyplot as plt
 from ament_index_python.packages import get_package_share_directory
@@ -67,7 +68,10 @@ class OCGridAdvertiser(Node):
             '/fmu/out/vehicle_local_position_v1', 
             self.position_callback, 
             qos_profile)
+        self.ugv_position_sub = self.create_subscription(GeoPoint, "/ugv/global_position",
+      		self.ugv_callback, qos_profile);
 
+        self.ugv_live = False
         self.north = 0.0
         self.east = 0.0
         self.down = 0.0
@@ -134,6 +138,12 @@ class OCGridAdvertiser(Node):
 
             self.destroy_subscription(self.position_subscription)
             self.position_subscription = None
+
+# @brief Subscribe UGV global position
+# @param 
+    def ugv_callback(self, msg):
+        if (msg is not None):
+            self.ugv_live = True
 
 # Get robot pose (NED) and orientation (RPY)
     def pose_callback(self, msg):
@@ -265,7 +275,10 @@ class OCGridAdvertiser(Node):
         # self.detection_map_mask_historic[self.detection_map_mask] = self.detection_map_mask[self.detection_map_mask]
 
         # Publish message if too different from previous
-        if (not self.is_similar(self.detection_map_img_topublish[self.detection_map_mask], self.detection_map_img_historic[self.detection_map_mask])):
+        if (not self.ugv_live or
+            not self.is_similar(
+                self.detection_map_img_topublish[self.detection_map_mask],
+                self.detection_map_img_historic[self.detection_map_mask])):
         # occ_img_msg = self.bridge.cv2_to_imgmsg((self.detection_map_img_historic>20).astype('uint8')*255, encoding="mono8")
             self.detection_map_img_topublish = self.detection_map_img_historic.copy()
             occ_img_msg = self.bridge.cv2_to_imgmsg(self.detection_map_img_historic, encoding="mono8")
